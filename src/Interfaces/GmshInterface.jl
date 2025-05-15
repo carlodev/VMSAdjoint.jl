@@ -60,6 +60,14 @@ function find_origin_idx(leading_edge_points::Vector)
     return idx
 end
 
+
+
+function create_msh(am::AirfoilMesh, pp::PhysicalParameters ; iter = 0)
+    @unpack AoA, cstdesign, meshref, folder = am
+    
+    return create_msh(cstdesign.ap; AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
+end
+
 """
     create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0, mesh_ref=1.0)
 
@@ -71,8 +79,8 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
     gmsh.initialize()
     
     gmsh.model.add("Model1")
-    Lback = 16*chord
-    H=6*chord
+    Lback = 5*chord
+    H=5*chord
     offset =2.35
     
     
@@ -208,7 +216,7 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
     
     #vertical outer lines
     for i in [20,13,8,21,15,5]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, 40, "Progression", 1.0)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, 10, "Progression", 1.0)
     end
 
         
@@ -225,7 +233,7 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
 
     #top airfoil
     for i in [24,17,3]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(100), Int32(round(150*mesh_ref))]), "Progression", 1.0)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, minimum([Int32(100), Int32(round(150*mesh_ref))]), "Progression", 1.0)
     end
     
     #bottom airfoil
