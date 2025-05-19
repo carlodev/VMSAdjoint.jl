@@ -50,7 +50,7 @@ Wrapper that evaluates `fun` the objective function. `fun` is a user-defined fun
 See eg. `compute_drag`, `compute_lift` functions. It return fitnessval,E. 
 `fitnessval` is the function value that need to be minimized. `E` is a value that we want to monitor.
 """
-function obj_fun(am::AirfoilModel, mcase::AdjointProblem, uh,ph, fun)
+function obj_fun(am::AirfoilModel, vbcase::Airfoil, uh,ph, fun)
     @unpack model, params = am
     # @unpack U,P = params
     Γ = BoundaryTriangulation(model; tags="airfoil")
@@ -60,7 +60,7 @@ function obj_fun(am::AirfoilModel, mcase::AdjointProblem, uh,ph, fun)
     # uh=FEFunction(U,uh_vec)
     # ph=FEFunction(P,ph_vec)
     
-    physicalp =  mcase.vbcase.simulationp.physicalp
+    physicalp =  vbcase.simulationp.physicalp
     CD,CL = compute_airfoil_coefficients(uh,ph,nΓ,dΓ, physicalp)
     fitnessval = fun([CD,CL])
 

@@ -62,8 +62,8 @@ end
 
 
 
-function create_msh(am::AirfoilMesh, pp::PhysicalParameters ; iter = 0)
-    @unpack AoA, cstdesign, meshref, folder = am
+function create_msh(am::AirfoilMesh,cstdesign::AirfoilCSTDesign,  pp::PhysicalParameters ; iter = 0)
+    @unpack AoA, meshref, folder = am
     
     return create_msh(cstdesign.ap; AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
 end
@@ -222,18 +222,20 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
         
     #vertical inner lines
     for i in [7,11,22,23,12,6]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(40), Int32(round(80*mesh_ref))]), "Progression", 1.12) # 1.02
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(60), Int32(round(35*mesh_ref))]), "Progression", 1.12) # 1.02
     end
     
     
     #inlet and leading edge
     for i in [9,19,26]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(101), Int32(round(20*mesh_ref))]), "Progression", 1.0)
+        # gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(101), Int32(round(20*mesh_ref))]), "Progression", 1.0)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(30), Int32(round(20*mesh_ref))]), "Progression", 1.0)
+
     end
 
     #top airfoil
     for i in [24,17,3]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, minimum([Int32(100), Int32(round(150*mesh_ref))]), "Progression", 1.0)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(100), Int32(round(50*mesh_ref))]), "Progression", 1.0)
     end
     
     #bottom airfoil
@@ -245,7 +247,7 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
     
     #Shear Curves
     for i in [4,14,10,16,2]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(40), Int32(round(20*mesh_ref))]), "Progression", 1.15)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(20), Int32(round(10*mesh_ref))]), "Progression", 1.15)
     end
     
     

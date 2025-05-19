@@ -68,14 +68,15 @@ function ParametersAdj.AirfoilModel(model, mcase::Airfoil; tag="airfoil")
 end
 
 
-function get_aerodynamic_features(params::Dict{Symbol,Any},model, uh,ph;tag="airfoil")
-    @unpack IDX_TOP,IDX_BOTTOM,u_in=params
+function get_aerodynamic_features(am::AirfoilModel, uh,ph;tag="airfoil")
 
+    @unpack IDX_TOP,IDX_BOTTOM=am.params
+    u_in = 1.0
     q = 0.5 .* u_in^2
 
     f = (reffe) -> Gridap.Geometry.UnstructuredGrid(reffe)
 
-    Γ = BoundaryTriangulation(model; tags=tag)
+    Γ = BoundaryTriangulation(am.model; tags=tag)
     cf = Dict("uh"=>uh,"ph"=>ph)
     trian_tag = Γ.trian
     
@@ -92,7 +93,7 @@ function get_aerodynamic_features(params::Dict{Symbol,Any},model, uh,ph;tag="air
     cp_top = pressure_top ./ q
     cp_bottom = pressure_bottom./ q
 
-     return cp_top,cp_bottom
+     return AirfoilScalar(cp_top,cp_bottom)
 end
 
 

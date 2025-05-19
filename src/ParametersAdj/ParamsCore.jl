@@ -24,13 +24,6 @@ function AirfoilScalar(am::AirfoilModel)
 end
 
 
-
-
-@with_kw mutable struct AdjBC
-    tagname::String="airfoil" #for multiple tags, we can put this as Vector{String}
-    bc::Vector #Adjoint BC on the tagname; it depends on what we want to optimize
-end
-
 @with_kw struct AdjSolver
     max_iter::Int64 = 10 #maximum number of adjoint iterations
     tol::Float64 = 2.5e-2 #tolerance convergence
@@ -39,20 +32,20 @@ end
 
 @with_kw struct AirfoilMesh <:MeshInfo
     AoA::Real #Angle of Attack - degrees
-    cstdesign::AirfoilCSTDesign
     meshref::Int64=1
     folder::String="MeshFiles"
 end
 
 struct AdjointProblem
-    bc::AdjBC
+    cstdesign::AirfoilCSTDesign
     vbcase::VelocityBoundaryCase
     solver::AdjSolver
+    J::Function #objective function
 end
 
-function AdjointProblem(    bc::AdjBC,vbcase::VelocityBoundaryCase)
+function AdjointProblem(    cstdesign::AirfoilCSTDesign,vbcase::VelocityBoundaryCase, J::Function)
     solver=AdjSolver()
-return     AdjointProblem(    bc,vbcase,solver)
+return     AdjointProblem(    cstdesign,vbcase,solver,J)
 end
 
 """
@@ -64,35 +57,23 @@ fitnessval : value of the fitness function, it should go towards zero as the ite
 fgrad : ∂J/∂βv derivative of the objective function with respect to the design variable βv
 airfoil_model : we store the arifoil model at this
 """
-@with_kw mutable struct AdjSolution
-    iter::Int64 = 0
-    i::Int64=0
-    fitnessval::Vector{Float64}
-    βv::Vector{Float64}
-    fgrad::Vector{Float64}
+struct AdjSolution
+    iter::Int64
+    fitnessval::Float64 
+    CDCL::Vector{Float64}
+    βv::Vector{Float64} 
+    fgrad::Vector{Float64} 
     airfoil_model::AirfoilModel
+    bc_adj::Vector{Float64} 
     pressure_distribution::AirfoilScalar
+    uh
+    ph
 end
 
-function AdjSolution(adjp::AdjointProblem, am::AirfoilModel)
-    max_iter = adjp.solver.max_iter
-    nβv = length(length(adjp.vbcase.meshp.meshinfo.cstdesign.cstg.cstw))
-    fitnessval = zeros(max_iter)
-    βv = zeros(nβv)
-    fgrad = zeros(nβv)
-    pressure_distribution = AirfoilScalar(am)
-    AdjSolution(fitnessval=fitnessval,βv=βv,fgrad=fgrad,airfoil_model=am, pressure_distribution=pressure_distribution)
 
-end
 
-struct FieldsSol
-    U
-    V
-    P
-    Q
-    uh_vec::Vector{VectorValue}
-    ph_vec::Vector{Float64}
-end
+# AdjSolution(; iter=-1, fitnessval=Inf, CDCL=[0.0,0.0],βv=Float64[],fgrad=Float64[], bc_adj=[0.0,0.0]; pressure_distribution=AirfoilScalar() )
+
 
 
 

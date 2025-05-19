@@ -5,7 +5,7 @@ end
 
 function solve_inc_primal(am::AirfoilModel, simcase::Airfoil, ::Val{:steady}; uh0=nothing, ph0=nothing)
     filename = "inc-primal-steady"
-    return solve_inc_primal_steady(am, simcase, filename)
+    return solve_inc_primal_steady(am, simcase, filename,uh0,ph0)
 end
 
 function solve_inc_primal(am::AirfoilModel, simcase::Airfoil, ::Val{:unsteady}; uh0=nothing, ph0=nothing)
@@ -119,7 +119,7 @@ end
 
 
 
-function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename)
+function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, uh00,ph00)
     @sunpack D,order,t_endramp,t0,tf,θ,dt,u_in = simcase
     @unpack model = am
     V,Q = create_primal_spaces(model,simcase)
@@ -148,10 +148,17 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename)
 
 
     uh = interpolate(u0, U)
-    ph = interpolate(-5.0, P)
+    ph = interpolate(0.0, P)
  
+    if !isnothing(uh00)
+        uh.free_values .=  uh00.free_values
+     end
+     
+     if !isnothing(ph00)
+         ph.free_values .=  ph00.free_values
+     end
 
-    for i = 1:3
+    for i = 1:5
         println(i)
         uh,ph = solve_steady_primal(uh,ph,X,Y,simcase, am.params,solver )
     end

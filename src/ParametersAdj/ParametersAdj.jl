@@ -9,7 +9,6 @@ using AirfoilTools
 export AirfoilNormals
 export AirfoilScalar
 export AirfoilModel
-export AdjBC
 export AirfoilMesh
 export AdjointProblem
 export AdjSolution
