@@ -1,1 +1,9 @@
 /Manifest*.toml
+
+MeshPerturb/
+MeshFiles/
+Results_adj/
+Results_primal/
+
+*.vtu
+*.jld2
