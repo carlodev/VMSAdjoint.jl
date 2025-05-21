@@ -16,7 +16,7 @@ cst0 = CST_NACA0012(;N=NW0, t=0.0)
 
 cstd0 = AirfoilCSTDesign(cst0,100)
 
-sprob = StabilizedProblem(VMS(2))
+sprob = StabilizedProblem(VMS(1))
 
 physicalp = PhysicalParameters(Re=1000, u_in=[1.0,0.0])
 timep = TimeParameters(dt=0.05, tF=10.0)
@@ -40,5 +40,7 @@ end
 
 adjoint_airfoil_problem = AdjointProblem( cstd0,airfoil_case,:steady, J)
 solve_adjoint_optimization(adjoint_airfoil_problem)
+
+
 
 

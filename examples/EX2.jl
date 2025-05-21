@@ -5,7 +5,7 @@ using Gridap, GridapGmsh
 using SegregatedVMSSolver.ParametersDef
 
 
-AoA = 15.0 #2.5
+AoA = 15.0#2.5
 Re = 15_000
 NW0 = 15 #number of w0 to parametrize top and bottom
 
@@ -30,6 +30,7 @@ airfoil_case = Airfoil(meshp,simparams,sprob)
 
 #Define the Objective Function, first argument [CD,CL], then you can define whatever you want
 
+
 function J(CDCL; CLtarget=1.25)
     CD,CL=CDCL
     return 0.5 * (CL - CLtarget)^2
@@ -37,10 +38,7 @@ end
 
 adjoint_airfoil_problem = AdjointProblem( cstd0,airfoil_case,:unsteady,J)
 
-
 solve_adjoint_optimization(adjoint_airfoil_problem)
-
-
 
 
 

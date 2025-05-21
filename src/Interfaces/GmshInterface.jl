@@ -213,35 +213,41 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
         gmsh.model.geo.mesh.setTransfiniteCurve(i, 10, "Progression", 1.0)
     end
 
+    if mesh_ref ==0
+        corr = 0.1
+    else
+        corr = 1.0
+    end
+
         
     #vertical inner lines
     for i in [7,11,22,23,12,6]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(60), Int32(round(35*mesh_ref))]), "Progression", 1.12) # 1.02
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(60*corr), Int32(round(35*mesh_ref))]), "Progression", 1.12) # 1.02
     end
     
     
     #inlet and leading edge
     for i in [9,19,26]
         # gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(101), Int32(round(20*mesh_ref))]), "Progression", 1.0)
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(30), Int32(round(20*mesh_ref))]), "Progression", 1.0)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(30*corr), Int32(round(20*mesh_ref))]), "Progression", 1.0)
 
     end
 
     #top airfoil
     for i in [24,17,3]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(100), Int32(round(60*mesh_ref))]), "Progression", 1.0)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(100*corr), Int32(round(60*mesh_ref))]), "Progression", 1.0)
     end
     
     #bottom airfoil
     for i in [25,18,1]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(50), Int32(round(50*mesh_ref))]), "Progression", 1.0)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(50*corr), Int32(round(50*mesh_ref))]), "Progression", 1.0)
     end
     
  
     
     #Shear Curves
     for i in [4,14,10,16,2]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(40), Int32(round(25*mesh_ref))]), "Progression", 1.15)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(40*corr), Int32(round(25*mesh_ref))]), "Progression", 1.15)
     end
     
     

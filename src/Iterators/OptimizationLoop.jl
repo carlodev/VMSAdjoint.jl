@@ -25,10 +25,10 @@ function create_optimizer(adjp::AdjointProblem, opt_loop::Function)
     ## Set the optimization algorithm
     opt = Opt(solver.opt_alg, Ndes) #solver.opt_alg = :LD_LBFGS
     
-    opt.lower_bounds = [0.07 .* ones(Nhalf); -1.5 .* ones(Nhalf)]
-    opt.upper_bounds = [1.5 .* ones(Nhalf);  -0.07 .* ones(Nhalf)]
+    nose = 0.08
 
-
+    opt.lower_bounds = [nose; nose; nose; -0.15.* ones(Nhalf-3); -1.5 .* ones(Nhalf)]
+    opt.upper_bounds = [1.5 .* ones(Nhalf); nose; -nose;-nose; 0.15 .* ones(Nhalf-3)]
 
     ## Set the tolerance
     opt.xtol_rel = solver.tol
@@ -64,8 +64,10 @@ function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any}
     @unpack  iter, uh, ph, adjp, am= loop_params
     @unpack J,cstdesign, vbcase,timesol = adjp
 
+    println("w = $w")
+
     #rename
-    airfoil_case =vbcase
+    airfoil_case = vbcase
     cstd0 = cstdesign
 
 
@@ -75,25 +77,29 @@ function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any}
 
     iter = iter+1
 
+
+
     @info "Iteration $iter started"
 
     #create the new airfoil model from the weights w
     cstd_new = AirfoilCSTDesign(cstd0,w)
 
     
+
     modelname =create_msh(meshinfo,cstd_new, physicalp ; iter = iter)
     model = GmshDiscreteModel(modelname)
     writevtk(model, "model_$iter")
 
     am =  AirfoilModel(model, airfoil_case; am=am)
-   
+
+
     #Solve Primal 
     if timesol==:steady
         filename = joinpath("Results_primal", "SOL_$(iter).vtu")
-
     else
            filename = "sol_$(iter)"
     end
+
     uh,ph = solve_inc_primal(am, airfoil_case, filename, timesol; uh0=uh,ph0=ph)    
  
     #### extract results from primal solution: Cp (and Cf)
@@ -113,7 +119,7 @@ function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any}
 
 
     Ndes = length(cstd0.cstg.cstw) #number of design parameters
-    δ = 0.01
+    δ = 0.0025 #0.01
     shift = CSTweights(Int(Ndes/2), δ)
     shiftv = vcat(shift)
 
@@ -132,13 +138,11 @@ function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any}
 
     grad .= Jtot
 
-    println("length(grad)")
-    println(length(grad))
+
     #update values iteration
 
-    println("Gradients at iter $iter")
-    println(grad)
-    adj_sol = AdjSolution(iter, fval, CDCL,w, grad, am, adj_bc, PressureCoefficient, uh,ph )
+
+    adj_sol = AdjSolution(iter, fval, CDCL, w, grad, am, adj_bc, PressureCoefficient, uh,ph )
 
     loop_params[:iter] = iter
     loop_params[:uh] = uh

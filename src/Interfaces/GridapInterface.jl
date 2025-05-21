@@ -4,7 +4,18 @@ using Parameters
 using SegregatedVMSSolver
 
 
-uniqueidx(v) = unique(i -> v[i], eachindex(v))
+# uniqueidx(v) = unique(i -> v[i], eachindex(v))
+
+function uniqueidx(v::AbstractVector)
+    tol = 1e-7
+    idxs = Int[]
+    for (i, vi) in enumerate(v)
+        if all(j -> norm(vi - v[j]) > tol, idxs)
+            push!(idxs, i)
+        end
+    end
+    return idxs
+end
 
 function get_nodes_idx(model, AoA::Float64, tag::String; params=nothing)
 
@@ -116,7 +127,7 @@ function is_above(p; AoA)
     return is_above(p, p2)
 end
 
-function is_above(p, p2; der_slope=0.002)
+function is_above(p, p2; der_slope=1.0)
     der = p2[2]/p2[1] .* der_slope # -0.20 #derivative in trailing edge Manage the (-0.20) factor
     c = p2[2]/p2[1] #-der/8 +  #derivative in leading edge
     

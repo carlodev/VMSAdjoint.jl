@@ -14,6 +14,7 @@ using VMSAdjoint.IncompressibleSolvers: create_primal_spaces,create_adjoint_spac
 using JLD2
 using NLopt
 
+using Interpolations
 using ForwardDiff
 
 export compute_airfoil_coefficients

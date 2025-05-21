@@ -4,9 +4,12 @@ function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, d_bc::Vector{Float64}
 end
 
 function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, d_bc::Vector{Float64}, filename::String, timed::Symbol, uh, ph)
-    solve_inc_adj_steady(am, simcase,d_bc, filename,  uh, ph)
+    solve_inc_adj(am, simcase,d_bc, filename, Val(timed), uh, ph)
 end
 
+function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, d_bc::Vector{Float64}, filename::String,  ::Val{:steady}, uh, ph)
+    solve_inc_adj_steady(am, simcase,d_bc, filename,  uh, ph)
+end
 
 
 function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, d_bc::Vector{Float64}, ::Val{:steady}, uh, ph)
@@ -169,6 +172,7 @@ function solve_inc_adj_steady(am::AirfoilModel, simcase::Airfoil,d_boundary::Vec
 
     ϕu, ϕp = Gridap.solve(solver, op_adj)
     
+    @info "Solving Steady Adjoint ..."
     res_path = "Results_adj"
     mkpath(res_path)
 
