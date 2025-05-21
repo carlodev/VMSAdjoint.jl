@@ -1,18 +1,6 @@
 using Gmsh
 import Gmsh: gmsh
 
-# function create_msh(des_tmp::DesignParameters;AoA=0.0, iter =0,chord = 1.0, mesh_ref=1.0, folder="MeshFiles")
-#     spline_points = SplinePoints(des_tmp)
-#     create_msh(spline_points;AoA=AoA, iter = iter, chord = chord, mesh_ref=mesh_ref, folder=folder)
-# end
-
-
-# function create_msh(xcontrol::Vector{Float64}; AoA=0.0, iter = 0, chord = 1.0, initfun=circle, folder="MeshFiles")
-# control_points = initialize_control_points(xcontrol; chord = chord, initfun=initfun)
-# create_msh(control_points; AoA=AoA, iter = iter, chord = chord, folder=folder)
-# end
-
-
 function split_splines_points(airfoil_points::AirfoilPoints, AoA::Float64; pos=0.065, chord = 1.0)
          
     @unpack xu,xl,yu,yl = airfoil_points
@@ -60,10 +48,16 @@ function find_origin_idx(leading_edge_points::Vector)
     return idx
 end
 
-
-
-function create_msh(am::AirfoilMesh,cstdesign::AirfoilCSTDesign,  pp::PhysicalParameters ; iter = 0)
+function create_msh(am::AirfoilMesh, cstdesign::AirfoilCSTDesign,  pp::PhysicalParameters ; iter::Int64= 0)
     @unpack AoA, meshref, folder = am
+    
+    return create_msh(cstdesign.ap; AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
+end
+
+
+
+function create_msh(am::AirfoilMesh, cstdesign::AirfoilCSTDesign,  pp::PhysicalParameters, folder::String; iter::Int64= 0 , )
+    @unpack AoA, meshref = am
     
     return create_msh(cstdesign.ap; AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
 end
@@ -79,8 +73,8 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
     gmsh.initialize()
     
     gmsh.model.add("Model1")
-    Lback = 5*chord
-    H=5*chord
+    Lback = 8*chord
+    H= 8*chord
     offset =2.35
     
     
@@ -235,7 +229,7 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
 
     #top airfoil
     for i in [24,17,3]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(100), Int32(round(50*mesh_ref))]), "Progression", 1.0)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(100), Int32(round(60*mesh_ref))]), "Progression", 1.0)
     end
     
     #bottom airfoil
@@ -247,7 +241,7 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
     
     #Shear Curves
     for i in [4,14,10,16,2]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(20), Int32(round(10*mesh_ref))]), "Progression", 1.15)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(40), Int32(round(25*mesh_ref))]), "Progression", 1.15)
     end
     
     

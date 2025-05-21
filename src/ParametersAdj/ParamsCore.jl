@@ -40,12 +40,19 @@ struct AdjointProblem
     cstdesign::AirfoilCSTDesign
     vbcase::VelocityBoundaryCase
     solver::AdjSolver
+    timesol::Symbol
     J::Function #objective function
+    function AdjointProblem(   cstdesign::AirfoilCSTDesign,vbcase::VelocityBoundaryCase,solver::AdjSolver,timesol::Symbol,J::Function)
+        if timesol ∉ (:steady, :unsteady)
+            throw(ArgumentError("Invalid timesol: $timesol. Must be :steady, :unsteady"))
+        end
+        new(cstdesign, vbcase,solver,timesol,J)
+    end
 end
 
-function AdjointProblem(    cstdesign::AirfoilCSTDesign,vbcase::VelocityBoundaryCase, J::Function)
+function AdjointProblem(    cstdesign::AirfoilCSTDesign,vbcase::VelocityBoundaryCase,timesol::Symbol, J::Function)
     solver=AdjSolver()
-return     AdjointProblem(    cstdesign,vbcase,solver,J)
+return     AdjointProblem(    cstdesign,vbcase,solver,timesol,J)
 end
 
 """

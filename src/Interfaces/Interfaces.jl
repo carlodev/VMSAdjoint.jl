@@ -7,7 +7,7 @@ using LinearAlgebra
 using VMSAdjoint.ParametersAdj
 using SegregatedVMSSolver.ParametersDef
 using SegregatedVMSSolver.Equations
-
+using AirfoilTools
 
 export updatekey
 export verifykey

@@ -6,8 +6,7 @@ using SegregatedVMSSolver
 
 uniqueidx(v) = unique(i -> v[i], eachindex(v))
 
-function get_nodes_idx(model, AoA::Float64, tag::String)
-
+function get_nodes_idx(model, AoA::Float64, tag::String; params=nothing)
 
     f = (reffe) -> Gridap.Geometry.UnstructuredGrid(reffe)
     Γ = BoundaryTriangulation(model; tags=tag)
@@ -17,19 +16,28 @@ function get_nodes_idx(model, AoA::Float64, tag::String)
     airfoil_points0 = visgrid0.sub_grid.node_coordinates
     idx_uniques = uniqueidx(airfoil_points0)
     airfoil_points = airfoil_points0[idx_uniques]
-    idx_above = is_above.(airfoil_points;AoA)
-    idx_top = findall(idx_above.> 0)
-    idx_bottom = findall(idx_above .< 0)
-        
-    perm_top = sortperm(getindex.(airfoil_points[idx_top],1))
-    perm_bottom = sortperm(getindex.(airfoil_points[idx_bottom],1))
-    IDX_TOP = idx_top[perm_top]
-    IDX_BOTTOM = idx_bottom[perm_bottom]
-    
-    params=Dict(:IDX_TOP=>idx_uniques[IDX_TOP],:IDX_BOTTOM=>idx_uniques[IDX_BOTTOM])
+    if isnothing(params)
+        idx_above = is_above.(airfoil_points;AoA)
+        idx_top = findall(idx_above.> 0)
+        idx_bottom = findall(idx_above .< 0)
+            
+        perm_top = sortperm(getindex.(airfoil_points[idx_top],1))
+        perm_bottom = sortperm(getindex.(airfoil_points[idx_bottom],1))
+        IDX_TOP = idx_top[perm_top]
+        IDX_BOTTOM = idx_bottom[perm_bottom]
+        IDX_TOP_UNIQUE=idx_uniques[IDX_TOP]
+        IDX_BOTTOM_UNIQUE=idx_uniques[IDX_BOTTOM]
+    else
+        @unpack IDX_TOP_UNIQUE,IDX_BOTTOM_UNIQUE,IDX_TOP,IDX_BOTTOM = params
+    end
+
+    params=Dict(:IDX_TOP_UNIQUE=>IDX_TOP_UNIQUE,:IDX_BOTTOM_UNIQUE=>IDX_BOTTOM_UNIQUE,
+    :IDX_TOP=>IDX_TOP,:IDX_BOTTOM=>IDX_BOTTOM)
+
 
     return airfoil_points[IDX_TOP],airfoil_points[IDX_BOTTOM], params
 end
+
 
 
 
@@ -55,11 +63,16 @@ end
 
 
 
-function ParametersAdj.AirfoilModel(model, mcase::Airfoil; tag="airfoil")
+function ParametersAdj.AirfoilModel(model, mcase::Airfoil; am=nothing, tag="airfoil")
     @sunpack AoA = mcase
 
+    if isnothing(am)
+        nodesu,nodesl,params = get_nodes_idx(model, AoA,tag)
+    else
+        @assert typeof(am)<:AirfoilModel
+        nodesu,nodesl,params = get_nodes_idx(model, AoA, tag; params=am.params)
+    end
 
-    nodesu,nodesl,params = get_nodes_idx(model, AoA,tag)
     ap = AirfoilPoints(getindex.(nodesu,1),getindex.(nodesl,1),getindex.(nodesu,2),getindex.(nodesl,2))
     nu,nl = get_normals(model, params, tag)
     an = AirfoilNormals(map(n-> [n...], nu),map(n-> [n...], nl))
@@ -70,7 +83,7 @@ end
 
 function get_aerodynamic_features(am::AirfoilModel, uh,ph;tag="airfoil")
 
-    @unpack IDX_TOP,IDX_BOTTOM=am.params
+    @unpack IDX_TOP_UNIQUE,IDX_BOTTOM_UNIQUE=am.params
     u_in = 1.0
     q = 0.5 .* u_in^2
 
@@ -88,8 +101,8 @@ function get_aerodynamic_features(am::AirfoilModel, uh,ph;tag="airfoil")
     pdata = Gridap.Visualization._prepare_pdata(Γ,cf,visgrid0.cell_to_refpoints)
 
     
-    pressure_top = pdata["ph"][IDX_TOP]
-    pressure_bottom  = pdata["ph"][IDX_BOTTOM]
+    pressure_top = pdata["ph"][IDX_TOP_UNIQUE]
+    pressure_bottom  = pdata["ph"][IDX_BOTTOM_UNIQUE]
     cp_top = pressure_top ./ q
     cp_bottom = pressure_bottom./ q
 

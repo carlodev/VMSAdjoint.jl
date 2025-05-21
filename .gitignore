@@ -5,6 +5,9 @@ MeshFiles/
 Results_adj/
 Results_primal/
 
-.*msh
+*.msh
 *.vtu
 *.jld2
+*.pvd
+*.sh
+*.out

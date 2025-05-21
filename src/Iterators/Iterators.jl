@@ -10,7 +10,7 @@ using AirfoilTools
 using VMSAdjoint.ParametersAdj
 using VMSAdjoint.Interfaces
 using VMSAdjoint.IncompressibleSolvers
-using VMSAdjoint.IncompressibleSolvers: create_primal_spaces,create_adjoint_spaces
+using VMSAdjoint.IncompressibleSolvers: create_primal_spaces,create_adjoint_spaces,solve_inc_primal_steady
 using JLD2
 using NLopt
 

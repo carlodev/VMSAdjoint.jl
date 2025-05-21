@@ -11,6 +11,9 @@ using Gridap
 using Gridap.Algebra
 using Gridap.FESpaces
 
+using GridapPETSc
+
+using Statistics
 using Parameters
 
 using JLD2

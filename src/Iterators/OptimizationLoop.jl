@@ -24,28 +24,28 @@ function create_optimizer(adjp::AdjointProblem, opt_loop::Function)
     
     ## Set the optimization algorithm
     opt = Opt(solver.opt_alg, Ndes) #solver.opt_alg = :LD_LBFGS
-
-    opt.lower_bounds = [-0.1 .* ones(Nhalf); -1.0 .* ones(Nhalf)]
-    opt.upper_bounds = [1.0 .* ones(Nhalf);  0.1 .* ones(Nhalf)]
+    
+    opt.lower_bounds = [0.07 .* ones(Nhalf); -1.5 .* ones(Nhalf)]
+    opt.upper_bounds = [1.5 .* ones(Nhalf);  -0.07 .* ones(Nhalf)]
 
 
 
     ## Set the tolerance
     opt.xtol_rel = solver.tol
-    
+    opt.maxeval = 15
+
     #initialize loop parameters
     loop_params=  init_loop(adjp)
 
     opt_loop_obj = (w, grad) -> opt_loop(w, grad, loop_params)
 
     opt.min_objective = opt_loop_obj
-
     return opt,w_init
 end
 
 
 function init_loop(adjp::AdjointProblem)
-    loop_params = Dict{Symbol,Any}(:iter=> -1, :uh=>nothing, :ph=>nothing, :AM=>nothing, :J=>adjp.J, :cstd0 =>adjp.cstdesign,:airfoil_case=>adjp.vbcase)
+    loop_params = Dict{Symbol,Any}(:iter=> -1, :uh=>nothing, :ph=>nothing, :adjp=>adjp, :am=>nothing)
     return loop_params
 end
 
@@ -61,7 +61,13 @@ It is using the solution at the previous iteration on the new geometry in order 
 """
 function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any})
 
-    @unpack  cstd0,airfoil_case,uh,ph,J, iter= loop_params
+    @unpack  iter, uh, ph, adjp, am= loop_params
+    @unpack J,cstdesign, vbcase,timesol = adjp
+
+    #rename
+    airfoil_case =vbcase
+    cstd0 = cstdesign
+
 
     meshinfo = airfoil_case.meshp.meshinfo
     physicalp =airfoil_case.simulationp.physicalp
@@ -79,12 +85,16 @@ function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any}
     model = GmshDiscreteModel(modelname)
     writevtk(model, "model_$iter")
 
-    am =  AirfoilModel(model, airfoil_case)
-
+    am =  AirfoilModel(model, airfoil_case; am=am)
    
     #Solve Primal 
-    uh,ph = solve_inc_primal(am, airfoil_case, :steady; uh0=uh, ph0=ph )
-        
+    if timesol==:steady
+        filename = joinpath("Results_primal", "SOL_$(iter).vtu")
+
+    else
+           filename = "sol_$(iter)"
+    end
+    uh,ph = solve_inc_primal(am, airfoil_case, filename, timesol; uh0=uh,ph0=ph)    
  
     #### extract results from primal solution: Cp (and Cf)
     PressureCoefficient = get_aerodynamic_features(am,uh,ph)
@@ -96,8 +106,7 @@ function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any}
     #use the CLCD value to set the Boundary Condition
     adj_bc = -dJobj_fun(J, CDCL)
 
-
-    uhadj,phadj = solve_inc_adj(am, airfoil_case, adj_bc, :steady, uh, ph)
+    uhadj,phadj = solve_inc_adj(am, airfoil_case, adj_bc, "inc-adj-steady-$iter", :steady, uh, ph)
 
 
     J1ref,(J2_1ref,J2_2ref,J2_3ref,J2_4ref,J2_5ref)= compute_sensitivity(airfoil_case, am,adj_bc, uh,ph,uhadj,phadj, J; i=iter)
@@ -134,6 +143,7 @@ function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any}
     loop_params[:iter] = iter
     loop_params[:uh] = uh
     loop_params[:ph] = ph
+    loop_params[:am] = am
 
     jldsave("results/ADJ_SOL$(iter).jld2"; adj_sol)
     @info "Iteration $iter completed"
@@ -160,7 +170,8 @@ function iterate_perturbation(shift::Vector{Float64},cstd::AirfoilCSTDesign,airf
     for (i,ss) in enumerate(shift)
         
         cstd_tmp = perturb_DesignParameter(cstd, i, ss)
-        modelname_tmp =create_msh(meshinfo,cstd_tmp, physicalp ; iter = i)
+
+        modelname_tmp =create_msh(meshinfo,cstd_tmp, physicalp,"MeshPerturb"; iter = i)
         model_tmp = GmshDiscreteModel(modelname_tmp)
         am_tmp =  AirfoilModel(model_tmp, airfoil_case)
 

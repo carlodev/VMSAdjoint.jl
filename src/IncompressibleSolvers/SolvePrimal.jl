@@ -3,6 +3,20 @@ function solve_inc_primal(am::AirfoilModel, simcase::Airfoil, timed::Symbol; uh0
     solve_inc_primal(am, simcase, Val(timed); uh0=uh0, ph0=ph0)
 end
 
+function solve_inc_primal(am::AirfoilModel, simcase::Airfoil, filename::String, timed::Symbol; uh0=nothing, ph0=nothing)
+    solve_inc_primal(am, simcase, filename, Val(timed); uh0=uh0, ph0=ph0)
+end
+
+function solve_inc_primal(am::AirfoilModel, simcase::Airfoil,  filename::String, ::Val{:steady}; uh0=nothing, ph0=nothing)
+    return solve_inc_primal_steady(am, simcase, filename,uh0,ph0)
+end
+
+function solve_inc_primal(am::AirfoilModel, simcase::Airfoil,  filename::String, ::Val{:unsteady}; uh0=nothing, ph0=nothing)
+    return solve_inc_primal_unsteady(am, simcase, filename, uh0, ph0)
+end
+
+
+
 function solve_inc_primal(am::AirfoilModel, simcase::Airfoil, ::Val{:steady}; uh0=nothing, ph0=nothing)
     filename = "inc-primal-steady"
     return solve_inc_primal_steady(am, simcase, filename,uh0,ph0)
@@ -25,9 +39,9 @@ function create_primal_spaces(model, simcase::Airfoil)
     return V,Q
 end
 
-function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename, uh00,ph00)
+function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename, uh00, ph00)
     
-    @sunpack D,order,t_endramp,t0,tF,θ,dt,u_in = simcase
+    @sunpack D,order,t_endramp,t0,tF,θ,dt,u_in,time_window = simcase
     @unpack model = am
 
     V,Q = create_primal_spaces(model,simcase)
@@ -37,9 +51,9 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     u0(x,t) = VectorValue(u_in...)
     u0(t::Real) = x -> u0(x,t)
 
-
     u_walls(x,t) = VectorValue(zeros(D)...) 
     u_walls(t::Real) = x -> u_walls(x,t)
+
     p0(x,t) = 0.0
     p0(t::Real) = x -> p0(x,t)
 
@@ -49,30 +63,28 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     Y = TransientMultiFieldFESpace([V, Q])
     X = TransientMultiFieldFESpace([U, P])
 
-    degree = order * 2 
+    degree = order * 4
     Ω = Triangulation(model)
     dΩ = Measure(Ω, degree)
     updatekey(am.params,:Ω,Ω)
     updatekey(am.params,:dΩ,dΩ)
     
     uh0 = interpolate(u0(0.0), U(0.0))
-    
     ph0 = interpolate(p0(0.0), P(0.0))
 
-    if !isnothing(uh00)
-       uh0.free_values .=  uh00.free_values
-    end
-    
-    if !isnothing(ph00)
-        ph0.free_values .=  ph00.free_values
+    if isnothing(uh00)
+        #initialize with steady solution
+        uh00,ph00 = solve_inc_primal_steady(am, simcase, nothing, uh00,uh00)
     end
 
-    dudt = interpolate(u_walls(0.0), U(0.0))
+    uh0.free_values .=  uh00.free_values
+    ph0.free_values .=  ph00.free_values
+
 
     xh0 = interpolate([uh0, ph0], X(0.0))
 
     updatekey(am.params, :uh,uh0)
-    m, res, rhs =  equations_primal( simcase,am.params,:unsteady)
+    m, res, rhs =  equations_primal( simcase, am.params,:unsteady)
 
     op = TransientAffineFEOperator(m, res, rhs, X, Y)
 
@@ -85,10 +97,8 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     UH = [copy(uh0.free_values)]
     PH = [copy(ph0.free_values)]
     
-    uh = uh0
-    ph = ph0
 
-    res_path = "Results_primal"
+    res_path = "Results_unsteady_primal"
     mkpath(res_path)
 
     createpvd(filename) do pvd
@@ -100,27 +110,49 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
             println("Primal solved at time step $t")
 
             copyto!(am.params[:uh].free_values,uh.free_values)
-            
+
             jldsave("UHPH.jld2"; UH,PH)
             
-            if mod(idx,50)==0
+            if mod(idx,1)==0
                 pvd[t] = createvtk(Ω, joinpath(res_path, "$(filename)_$t" * ".vtu"), cellfields=["uh" => uh, "ph" => ph])
             end
 
         end
     end
 
-    DUHDT = vcat(0.0,UH[2:end] -UH[1:end-1])./dt
-    return (uh,dudt, UH, DUHDT), (ph, PH)
+    avg_UH,avg_PH = time_average_fields(UH,PH, time_window,dt, t0)
+
+    uh0.free_values .=  avg_UH
+    ph0.free_values .=  avg_PH
+    
+    return uh0,ph0
 
 end
 
 
 
+function time_average_fields(UH,PH, time_window,dt::Float64, t0::Float64)
+    # Number of stored snapshots (including t0)
+    nt = length(UH)
+    
+    #Time to start the averaging
+    t_0 = time_window[1]
 
+    # Reconstruct time values (t0, t0+dt, ..., tF)
+    times = t0:dt:(t0 + dt*(nt-1))
+
+    # Find indices where t ≥ t01
+    indices = findall(t -> t ≥ t_0, times)
+
+    # Average the snapshots over the selected indices
+    avg_UH = Statistics.mean(UH[indices])
+    avg_PH =  Statistics.mean(PH[indices])
+    return avg_UH,avg_PH
+
+end
 
 function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, uh00,ph00)
-    @sunpack D,order,t_endramp,t0,tf,θ,dt,u_in = simcase
+    @sunpack D,order,t_endramp,t0,tf,θ,dt,u_in,petsc_options = simcase
     @unpack model = am
     V,Q = create_primal_spaces(model,simcase)
 
@@ -143,8 +175,14 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
     updatekey(am.params,:Ω,Ω)
     updatekey(am.params,:dΩ,dΩ)
 
+    # GridapPETSc.with(args=split(petsc_options)) do
+
+
     ls = LUSolver()
+    # ls = BackslashSolver()
+
     solver = LinearFESolver(ls)
+    # solver = PETScLinearSolver()
 
 
     uh = interpolate(u0, U)
@@ -158,12 +196,12 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
          ph.free_values .=  ph00.free_values
      end
 
-    for i = 1:5
+    for i = 1:4
         println(i)
         uh,ph = solve_steady_primal(uh,ph,X,Y,simcase, am.params,solver )
     end
 
-
+    # end #end GridapPETSc
 
 
     if !isnothing(filename)
@@ -185,7 +223,9 @@ function solve_steady_primal(uh,ph,X,Y,simcase, params,solver )
   
     @info "solving steady problem..."
 
+    # Gridap.solve!(xh, solver, op)
     Gridap.solve!(xh, solver, op)
+
     uh, ph = xh 
     return  uh, ph
 end

@@ -17,9 +17,9 @@ end
 
 
 function equations_primal( simcase::Airfoil,params::Dict{Symbol,Any},::Val{:unsteady})
-    @unpack uh,dΩ = params
+    @unpack dΩ = params
     @sunpack D = simcase
-    Tuu,Tpu,Auu,Aup,Apu,App,_,_,rhs_v = segregated_equations(uh,params,simcase)
+    Tuu,Tpu,Auu,Aup,Apu,App,_,_,rhs_v = segregated_equations(params[:uh],params,simcase)
     
     m(t, (u, p), (v, q)) = Tuu(u,v) + Tpu(u,q)
 

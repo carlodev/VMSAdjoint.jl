@@ -3,10 +3,19 @@ function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, d_bc::Vector{Float64}
     solve_inc_adj(am, simcase,d_bc, Val(timed), uh, ph)
 end
 
+function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, d_bc::Vector{Float64}, filename::String, timed::Symbol, uh, ph)
+    solve_inc_adj_steady(am, simcase,d_bc, filename,  uh, ph)
+end
+
+
+
 function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, d_bc::Vector{Float64}, ::Val{:steady}, uh, ph)
     filename = "inc-adj-steady"
     return solve_inc_adj_steady(am, simcase,d_bc, filename,uh,ph)
 end
+
+
+
 
 # function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, ::Val{:unsteady}; uh0=nothing, ph0=nothing)
 #     filename = "inc-primal-unsteady"
@@ -139,7 +148,8 @@ function solve_inc_adj_steady(am::AirfoilModel, simcase::Airfoil,d_boundary::Vec
     updatekey(params, :nΓairfoil,nΓairfoil)
 
     V_adj,Q_adj = create_adjoint_spaces(model, simcase)
-    println(d_boundary)
+    println("Adjoint Boundary condition value: $d_boundary")
+
     U_adj = TrialFESpace(V_adj, [VectorValue(d_boundary...), VectorValue(0, 0),VectorValue(0, 0)])
     P_adj = TrialFESpace(Q_adj,0.0)
 

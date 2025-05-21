@@ -17,7 +17,7 @@ It needs the normals pointings outward respect to the body.
 """
 
 function compute_airfoil_forces(uh::SingleFieldFEFunction,ph::SingleFieldFEFunction,nΓ::OperationCellField,dΓ::GenericMeasure,ν::Float64)
-    IForce = ∫( -ph ⋅ nΓ+ ν* transpose(∇(uh)) ⋅ nΓ)dΓ #+ 
+    IForce = ∫( -ph ⋅ nΓ+ ν* (∇(uh) + transpose(∇(uh))) ⋅ nΓ)dΓ #+ 
     D,L = sum(IForce)
     return D,L
 end
