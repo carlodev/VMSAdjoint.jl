@@ -72,11 +72,14 @@ function obj_fun(am::AirfoilModel, vbcase::Airfoil, uh, ph, fun)
 end
 
 function thickness_penalty(am::AirfoilModel; tmin=0.005, α=1_000.0)
+    
+    leading_edge_cutoff = 0.01
+    trailing_edge_cutoff = 0.01
+
     # Find the overall x-range of the airfoil
     xx0 = maximum([minimum(am.ap.xu);minimum(am.ap.xl)] )+ leading_edge_cutoff
     xx1 =minimum([maximum(am.ap.xu);maximum(am.ap.xl)] )- trailing_edge_cutoff
-    leading_edge_cutoff = 0.01
-    trailing_edge_cutoff = 0.01
+ 
 
     @assert xx1 > xx0 "Airfoil x-coordinates don't span a valid range"
 

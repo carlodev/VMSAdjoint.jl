@@ -5,7 +5,7 @@ using Gridap, GridapGmsh
 using SegregatedVMSSolver.ParametersDef
 
 
-AoA = 15.0#2.5
+AoA = 10.0
 Re = 15_000
 NW0 = 15 #number of w0 to parametrize top and bottom
 

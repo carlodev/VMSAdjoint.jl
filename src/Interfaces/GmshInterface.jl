@@ -48,18 +48,18 @@ function find_origin_idx(leading_edge_points::Vector)
     return idx
 end
 
-function create_msh(am::AirfoilMesh, cstdesign::AirfoilCSTDesign,  pp::PhysicalParameters ; iter::Int64= 0)
+function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,  pp::PhysicalParameters ; iter::Int64= 0)
     @unpack AoA, meshref, folder = am
-    
-    return create_msh(cstdesign.ap; AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
+    @unpack ap = airfoil_design
+    return create_msh(ap; AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
 end
 
 
 
-function create_msh(am::AirfoilMesh, cstdesign::AirfoilCSTDesign,  pp::PhysicalParameters, folder::String; iter::Int64= 0 , )
+function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,  pp::PhysicalParameters, folder::String; iter::Int64= 0 , )
     @unpack AoA, meshref = am
-    
-    return create_msh(cstdesign.ap; AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
+    @unpack ap = airfoil_design
+    return create_msh(ap; AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
 end
 
 """

@@ -28,6 +28,7 @@ end
     max_iter::Int64 = 10 #maximum number of adjoint iterations
     tol::Float64 = 2.5e-2 #tolerance convergence
     opt_alg::Symbol = :LD_LBFGS #OPTIMIZATION algorithm
+    δ::Float64=0.01
 end
 
 @with_kw struct AirfoilMesh <:MeshInfo
@@ -37,22 +38,22 @@ end
 end
 
 struct AdjointProblem
-    cstdesign::AirfoilCSTDesign
+    adesign::AirfoilDesign
     vbcase::VelocityBoundaryCase
     solver::AdjSolver
     timesol::Symbol
     J::Function #objective function
-    function AdjointProblem(   cstdesign::AirfoilCSTDesign,vbcase::VelocityBoundaryCase,solver::AdjSolver,timesol::Symbol,J::Function)
+    function AdjointProblem(   adesign::AirfoilDesign,vbcase::VelocityBoundaryCase,solver::AdjSolver,timesol::Symbol,J::Function)
         if timesol ∉ (:steady, :unsteady)
             throw(ArgumentError("Invalid timesol: $timesol. Must be :steady, :unsteady"))
         end
-        new(cstdesign, vbcase,solver,timesol,J)
+        new(adesign, vbcase,solver,timesol,J)
     end
 end
 
-function AdjointProblem(    cstdesign::AirfoilCSTDesign,vbcase::VelocityBoundaryCase,timesol::Symbol, J::Function)
+function AdjointProblem(    adesign::AirfoilDesign,vbcase::VelocityBoundaryCase,timesol::Symbol, J::Function)
     solver=AdjSolver()
-return     AdjointProblem(    cstdesign,vbcase,solver,timesol,J)
+return     AdjointProblem(    adesign,vbcase,solver,timesol,J)
 end
 
 """

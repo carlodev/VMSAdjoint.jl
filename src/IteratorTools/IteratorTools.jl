@@ -1,4 +1,4 @@
-module Iterators
+module IteratorTools
 
 using Parameters
 using Gridap

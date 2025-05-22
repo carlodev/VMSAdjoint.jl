@@ -13,26 +13,26 @@ end
 
 function create_optimizer(adjp::AdjointProblem, opt_loop::Function)
     @unpack solver = adjp
-    cstw = adjp.cstdesign.cstg.cstw
 
     #create initial
-    w_init = vcat(cstw)
+    w_init = get_DesignParameters(adjp.adesign)
 
     #create bounds
-    Ndes = length(cstw)
-    Nhalf = Int(Ndes ÷ 2)
+    Ndes = length(w_init)
     
     ## Set the optimization algorithm
     opt = Opt(solver.opt_alg, Ndes) #solver.opt_alg = :LD_LBFGS
-    
-    nose = 0.08
 
-    opt.lower_bounds = [nose; nose; nose; -0.15.* ones(Nhalf-3); -1.5 .* ones(Nhalf)]
-    opt.upper_bounds = [1.5 .* ones(Nhalf); nose; -nose;-nose; 0.15 .* ones(Nhalf-3)]
+    opt.initial_step = 0.01 .* ones(Ndes)  # or smaller
+
+    lb,ub = bounds_w(adjp.adesign,  Ndes)
+
+    opt.lower_bounds =lb
+    opt.upper_bounds =ub
+    
 
     ## Set the tolerance
     opt.xtol_rel = solver.tol
-    opt.maxeval = 15
 
     #initialize loop parameters
     loop_params=  init_loop(adjp)
@@ -41,6 +41,30 @@ function create_optimizer(adjp::AdjointProblem, opt_loop::Function)
 
     opt.min_objective = opt_loop_obj
     return opt,w_init
+end
+
+
+
+function bounds_w(adesign::RBFDesign, Ndes::Int64)
+    Nhalf = Int(Ndes ÷ 2)
+    lb = [-0.05 .* ones(Nhalf);-0.25.* ones(Nhalf)]
+    ub =[0.25 .* ones(Nhalf); 0.05.* ones(Nhalf)]
+    lb[1] = 0.005
+    ub[Nhalf+1] = -0.005
+    
+    
+    [@assert ub1>lb1 for (ub1,lb1) in zip(ub,lb)]
+
+    return lb,ub
+end
+
+
+function bounds_w(adesign::AirfoilCSTDesign,  Ndes::Int64)
+    Nhalf = Int(Ndes ÷ 2)
+    nose = 0.08
+    lb = [nose; nose; nose; -0.15.* ones(Nhalf-3); -1.5 .* ones(Nhalf)]
+    ub = [1.5 .* ones(Nhalf); nose; -nose;-nose; 0.15 .* ones(Nhalf-3)]
+    return lb,ub
 end
 
 
@@ -62,31 +86,31 @@ It is using the solution at the previous iteration on the new geometry in order 
 function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any})
 
     @unpack  iter, uh, ph, adjp, am= loop_params
-    @unpack J,cstdesign, vbcase,timesol = adjp
+    @unpack J,adesign, vbcase, timesol,solver = adjp
 
     println("w = $w")
 
     #rename
     airfoil_case = vbcase
-    cstd0 = cstdesign
 
 
     meshinfo = airfoil_case.meshp.meshinfo
-    physicalp =airfoil_case.simulationp.physicalp
+    physicalp = airfoil_case.simulationp.physicalp
 
 
     iter = iter+1
 
+    iter>10 && throw(StopException("Maximum number of iterations"))
 
 
     @info "Iteration $iter started"
 
     #create the new airfoil model from the weights w
-    cstd_new = AirfoilCSTDesign(cstd0,w)
+    adesign = create_AirfoilDesign(adesign,w)
 
     
 
-    modelname =create_msh(meshinfo,cstd_new, physicalp ; iter = iter)
+    modelname =create_msh(meshinfo,adesign, physicalp ; iter = iter)
     model = GmshDiscreteModel(modelname)
     writevtk(model, "model_$iter")
 
@@ -118,12 +142,12 @@ function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any}
     J1ref,(J2_1ref,J2_2ref,J2_3ref,J2_4ref,J2_5ref)= compute_sensitivity(airfoil_case, am,adj_bc, uh,ph,uhadj,phadj, J; i=iter)
 
 
-    Ndes = length(cstd0.cstg.cstw) #number of design parameters
-    δ = 0.0025 #0.01
+    Ndes = length(w) #number of design parameters
+    δ = solver.δ #0.01
     shift = CSTweights(Int(Ndes/2), δ)
     shiftv = vcat(shift)
 
-    J1, (J2_1,J2_2,J2_3,J2_4,J2_5) = iterate_perturbation(shiftv,cstd0,airfoil_case,adj_bc,uh,ph,uhadj,phadj, J  )
+    J1, (J2_1,J2_2,J2_3,J2_4,J2_5) = iterate_perturbation(shiftv,adesign,airfoil_case,adj_bc,uh,ph,uhadj,phadj, J  )
     J1s = (J1 .- J1ref)./shiftv
     J2s1 = (J2_1 .- J2_1ref)./shiftv
     J2s2 = (J2_2 .- J2_2ref)./shiftv
@@ -158,7 +182,7 @@ end
 
 
 
-function iterate_perturbation(shift::Vector{Float64},cstd::AirfoilCSTDesign,airfoil_case::Airfoil,adj_bc::Vector{Float64}, uh,ph,uhadj,phadj, J::Function  )
+function iterate_perturbation(shift::Vector{Float64},adesign::AirfoilDesign,airfoil_case::Airfoil,adj_bc::Vector{Float64}, uh,ph,uhadj,phadj, J::Function  )
     Ndes = length(shift)
 
     meshinfo = airfoil_case.meshp.meshinfo
@@ -173,9 +197,9 @@ function iterate_perturbation(shift::Vector{Float64},cstd::AirfoilCSTDesign,airf
 
     for (i,ss) in enumerate(shift)
         
-        cstd_tmp = perturb_DesignParameter(cstd, i, ss)
+        adesign_tmp = perturb_DesignParameter(adesign, i, ss)
 
-        modelname_tmp =create_msh(meshinfo,cstd_tmp, physicalp,"MeshPerturb"; iter = i)
+        modelname_tmp =create_msh(meshinfo,adesign_tmp, physicalp,"MeshPerturb"; iter = i)
         model_tmp = GmshDiscreteModel(modelname_tmp)
         am_tmp =  AirfoilModel(model_tmp, airfoil_case)
 
