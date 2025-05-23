@@ -28,7 +28,8 @@ end
     max_iter::Int64 = 10 #maximum number of adjoint iterations
     tol::Float64 = 2.5e-2 #tolerance convergence
     opt_alg::Symbol = :LD_LBFGS #OPTIMIZATION algorithm
-    δ::Float64=0.01
+    δ::Float64=0.01 #Perturbation of the design parameters for finite differences
+    
 end
 
 @with_kw struct AirfoilMesh <:MeshInfo
