@@ -50,7 +50,7 @@ Wrapper that evaluates `fun` the objective function. `fun` is a user-defined fun
 See eg. `compute_drag`, `compute_lift` functions. It return fitnessval,E. 
 `fitnessval` is the function value that need to be minimized. `E` is a value that we want to monitor.
 """
-function obj_fun(am::AirfoilModel, vbcase::Airfoil, uh, ph, fun)
+function obj_fun(am::AirfoilModel, vbcase::Airfoil, uh, ph, fun::Function)
     @sunpack order = vbcase
     @unpack model, params = am
 
@@ -83,7 +83,7 @@ function thickness_penalty(am::AirfoilModel; tmin=0.005, α=1_000.0)
 
     @assert xx1 > xx0 "Airfoil x-coordinates don't span a valid range"
 
-    # Filter points to exclude the leading edge region
+    # Filter points to exclude the leading and trailing edge regions
 
     # For upper surface
     valid_upper_idx = findall(x -> xx1  >= x >= xx0 , am.ap.xu)
@@ -96,25 +96,34 @@ function thickness_penalty(am::AirfoilModel; tmin=0.005, α=1_000.0)
     yl_filtered = am.ap.yl[valid_lower_idx]
 
     # Verify the filtered coordinates are sorted
-    @assert issorted(xu_filtered) "Upper surface x-coordinates not sorted after filtering"
-    @assert issorted(xl_filtered) "Lower surface x-coordinates not sorted after filtering"
+    @assert issorted(xu_filtered) "Upper surface x-coordinates not sorted"
+    @assert issorted(xl_filtered) "Lower surface x-coordinates not sorted"
 
-    # Create evaluation points (excluding leading edge)
-    xx = collect(LinRange(xx0 + leading_edge_cutoff, xx1, 201))
+    # Create evaluation points
+    xx01 = maximum([minimum(xu_filtered);minimum(xl_filtered)] )
+    xx11 =minimum([maximum(xu_filtered);maximum(xl_filtered)] )
+    xx = collect(LinRange(xx01, xx11, 201))
 
+    
     # Interpolate surfaces
-    yu = linear_interpolation(xu_filtered, yu_filtered, extrapolation_bc=Line()).(xx)
-    yl = linear_interpolation(xl_filtered, yl_filtered, extrapolation_bc=Line()).(xx)
+    yu = linear_interpolation(xu_filtered, yu_filtered).(xx)
+    yl = linear_interpolation(xl_filtered, yl_filtered).(xx)
 
     # Calculate thickness
     Δy = yu - yl
-    # Check for minimum thickness violations, excluding endpoints for stability
+
+    # Check for minimum thickness violations
     thickness_violations = tmin .- Δy
+    violations_locations = findall(thickness_violations.>0)
+    !isempty(violations_locations) && println("Violations Locations x= $(xx[violations_locations])")
+    
+    #Σviolations^2
     penalty = sum((violation > 0) ? violation^2 : 0.0 for violation in thickness_violations)
+
 
     if isnan(penalty) || isinf(penalty)
         @error "Invalid penalty value detected. Check airfoil coordinates."
-        return α * 100.0  # Return a large penalty for invalid configurations
+        return α   # Return a large penalty for invalid configurations
     end
 
     return penalty * α
