@@ -222,7 +222,7 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
         
     #vertical inner lines
     for i in [7,11,22,23,12,6]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(60*corr), Int32(round(35*mesh_ref))]), "Progression", 1.12) # 1.02
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(60*corr), Int32(round(70*mesh_ref))]), "Progression", 1.12) # 1.02
     end
     
     
