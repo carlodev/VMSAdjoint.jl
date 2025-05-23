@@ -6,7 +6,7 @@ From the solution of the primal flow `uh0` `ph0`, and the adjoint flow `ϕu0` `�
 J2 contributions are splitted and the gradients computed individually to avoid numerical cancellation
 """
 function  compute_sensitivity(simcase::Airfoil, am::AirfoilModel, d_boundary::Vector{Float64}, uh0,ph0,ϕu0, ϕp0, J::Function; i::Int64=1)
-    @sunpack D,order,u_in, ν ,u_in = simcase
+    @sunpack D,order,u_in, ν = simcase
     model = am.model
     V,Q = create_primal_spaces(model, simcase)
 
@@ -20,7 +20,7 @@ function  compute_sensitivity(simcase::Airfoil, am::AirfoilModel, d_boundary::Ve
 
     V_adj,Q_adj = create_adjoint_spaces(model, simcase)
     U_adj = TrialFESpace(V_adj, [VectorValue(d_boundary...), VectorValue(zeros(D)...),VectorValue(zeros(D)...)])
-    P_adj = TrialFESpace(Q_adj)
+    P_adj = TrialFESpace(Q_adj,0.0)
     
     
     uh = FEFunction(U,uh0.free_values)
@@ -35,7 +35,7 @@ function  compute_sensitivity(simcase::Airfoil, am::AirfoilModel, d_boundary::Ve
 
     Γ = BoundaryTriangulation(model; tags="airfoil")
     dΓ = Measure(Γ, order*2)
-    nΓ =  -1 .*get_normal_vector(Γ) #-1, pointing outward
+    nΓ =  get_normal_vector(Γ) #-1, pointing outward
 
     J2_1 = sum(∫(ϕu⋅(transpose(∇(uh))⋅uh ))dΩ) 
     J2_2 = sum(∫(ϕu⋅(∇(ph)))dΩ)
@@ -44,7 +44,7 @@ function  compute_sensitivity(simcase::Airfoil, am::AirfoilModel, d_boundary::Ve
     J2_5 = -ν* sum(∫(ϕu⋅transpose(∇(uh))⋅ nΓ)dΓ)
     
     #export i
-    fname = joinpath("MeshPerturb","model-$(100+i)")
+    fname = joinpath("MeshPerturb","model-$(i)")
     writevtk(Ω, fname, cellfields=["uh"=>uh,"ph"=>ph, "uadj"=>ϕu,"padj"=>ϕp])
 
     
