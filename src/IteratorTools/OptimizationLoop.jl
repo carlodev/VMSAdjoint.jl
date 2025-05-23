@@ -47,10 +47,11 @@ end
 
 function bounds_w(adesign::RBFDesign, Ndes::Int64)
     Nhalf = Int(Ndes ÷ 2)
-    lb = [-0.05 .* ones(Nhalf);-0.25.* ones(Nhalf)]
-    ub =[0.25 .* ones(Nhalf); 0.05.* ones(Nhalf)]
-    lb[1] = 0.005
-    ub[Nhalf+1] = -0.005
+    Δy = 0.005
+    lb = [-Δy .* ones(Nhalf);-0.25.* ones(Nhalf)]
+    ub =[0.25 .* ones(Nhalf); Δy.* ones(Nhalf)]
+    lb[1] = Δy
+    ub[Nhalf+1] = -Δy
     
     
     [@assert ub1>lb1 for (ub1,lb1) in zip(ub,lb)]
@@ -90,6 +91,9 @@ function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any}
 
     println("w = $w")
 
+    iter>solver.max_iter && throw(StopException("Maximum number of iterations"))
+
+
     #rename
     airfoil_case = vbcase
 
@@ -99,9 +103,6 @@ function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any}
 
 
     iter = iter+1
-
-    iter>10 && throw(StopException("Maximum number of iterations"))
-
 
     @info "Iteration $iter started"
 
@@ -113,6 +114,7 @@ function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any}
     modelname =create_msh(meshinfo,adesign, physicalp ; iter = iter)
     model = GmshDiscreteModel(modelname)
     writevtk(model, "model_$iter")
+    
 
     am =  AirfoilModel(model, airfoil_case; am=am)
 
@@ -145,9 +147,12 @@ function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any}
     Ndes = length(w) #number of design parameters
     δ = solver.δ #0.01
     shift = CSTweights(Int(Ndes/2), δ)
-    shiftv = vcat(shift)
+    shiftv =   vcat(shift)
 
-    J1, (J2_1,J2_2,J2_3,J2_4,J2_5) = iterate_perturbation(shiftv,adesign,airfoil_case,adj_bc,uh,ph,uhadj,phadj, J  )
+    
+    J1, (J2_1,J2_2,J2_3,J2_4,J2_5) = iterate_perturbation(shiftv,adesign,am, airfoil_case,adj_bc,uh,ph,uhadj,phadj, J  )
+
+    # shiftv = δ
     J1s = (J1 .- J1ref)./shiftv
     J2s1 = (J2_1 .- J2_1ref)./shiftv
     J2s2 = (J2_2 .- J2_2ref)./shiftv
@@ -159,6 +164,18 @@ function optimization_loop(w::Vector,grad::Vector, loop_params::Dict{Symbol,Any}
     J2s = J2s1 + J2s2 + J2s3 + J2s4 + J2s5
     Jtot = J1s .+ J2s
     
+    println("Geometric Gradient:")
+    println(J1s)
+
+    println("Adjoint Gradient:")
+    println(J2s1)
+    println(J2s2)
+    println(J2s3)
+    println(J2s4)
+    println(J2s5)
+    JtotD = Dict(:J1s=>J1s, :J2s1=>J2s1 , :J2s2=>J2s2 , :J2s3=>J2s3, :J2s4=>J2s4, :J2s5=>J2s5 )
+    
+    jldsave("results/J$(iter).jld2"; JtotD)
 
     grad .= Jtot
 
@@ -182,7 +199,7 @@ end
 
 
 
-function iterate_perturbation(shift::Vector{Float64},adesign::AirfoilDesign,airfoil_case::Airfoil,adj_bc::Vector{Float64}, uh,ph,uhadj,phadj, J::Function  )
+function iterate_perturbation(shift::Vector{Float64},adesign::AirfoilDesign,am::AirfoilModel,airfoil_case::Airfoil,adj_bc::Vector{Float64}, uh,ph,uhadj,phadj, J::Function  )
     Ndes = length(shift)
 
     meshinfo = airfoil_case.meshp.meshinfo
@@ -196,14 +213,15 @@ function iterate_perturbation(shift::Vector{Float64},adesign::AirfoilDesign,airf
     J2_5=zeros(Ndes)
 
     for (i,ss) in enumerate(shift)
-        
+        println("Perturbation Domain $i")
+
         adesign_tmp = perturb_DesignParameter(adesign, i, ss)
 
-        modelname_tmp =create_msh(meshinfo,adesign_tmp, physicalp,"MeshPerturb"; iter = i)
+        modelname_tmp =create_msh(meshinfo,adesign_tmp, physicalp,"MeshPerturb"; iter = i+100)
         model_tmp = GmshDiscreteModel(modelname_tmp)
-        am_tmp =  AirfoilModel(model_tmp, airfoil_case)
+        am_tmp =  AirfoilModel(model_tmp, airfoil_case, am=am)
 
-        J1tmp,(J2_1tmp,J2_2tmp,J2_3tmp,J2_4tmp,J2_5tmp)= compute_sensitivity(airfoil_case, am_tmp,adj_bc, uh,ph,uhadj,phadj, J; i=i)
+        J1tmp,(J2_1tmp,J2_2tmp,J2_3tmp,J2_4tmp,J2_5tmp)= compute_sensitivity(airfoil_case, am_tmp,adj_bc, uh,ph,uhadj,phadj, J; i=i+100)
 
         J1[i] = J1tmp
         J2_1[i] = J2_1tmp
@@ -211,7 +229,7 @@ function iterate_perturbation(shift::Vector{Float64},adesign::AirfoilDesign,airf
         J2_3[i] = J2_3tmp
         J2_4[i] = J2_4tmp
         J2_5[i] = J2_5tmp
-        println("Perturbation Domain $i")
+
     end
     
     return J1, (J2_1,J2_2,J2_3,J2_4,J2_5)
