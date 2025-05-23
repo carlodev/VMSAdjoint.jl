@@ -56,7 +56,7 @@ function get_normals(model, params, tag)
 
     @unpack IDX_TOP, IDX_BOTTOM = params
     Γ = BoundaryTriangulation(model; tags=tag)
-    n_Γ = -1 .*get_normal_vector(Γ)
+    n_Γ = -1 .*get_normal_vector(Γ) #pointing outward
     n_Γ_dict = Dict("n_Γ" => n_Γ)
     f = (reffe) -> Gridap.Geometry.UnstructuredGrid(reffe)
 
