@@ -127,18 +127,20 @@ function solve_inc_adj_steady(am::AirfoilModel, simcase::Airfoil,d_boundary::Vec
     
     @unpack params,model = am
     @unpack Ω = params
+    @sunpack order = simcase
+
 
     Γout = BoundaryTriangulation(model; tags="outlet")
-    dΓout = Measure(Γout, 4)
-    nΓout = -1 .* get_normal_vector(Γout)
+    dΓout = Measure(Γout, order*2)
+    nΓout =  get_normal_vector(Γout)
 
     Γlim = BoundaryTriangulation(model; tags="limits")
-    dΓlim = Measure(Γlim, 4)
-    nΓlim = -1 .* get_normal_vector(Γlim)
+    dΓlim = Measure(Γlim, order*2)
+    nΓlim =  get_normal_vector(Γlim)
 
     Γairfoil = BoundaryTriangulation(model; tags="airfoil")
-    dΓairfoil = Measure(Γairfoil, 4)
-    nΓairfoil = -1 .* get_normal_vector(Γairfoil)
+    dΓairfoil = Measure(Γairfoil, order*2)
+    nΓairfoil = get_normal_vector(Γairfoil)
 
 
     updatekey(params, :dΓout,dΓout)
