@@ -44,8 +44,10 @@ function  compute_sensitivity(simcase::Airfoil, am::AirfoilModel, d_boundary::Ve
     J2_5 = -ν* sum(∫(ϕu⋅transpose(∇(uh))⋅ nΓ)dΓ)
     
     #export i
-    fname = joinpath("MeshPerturb","model-$(i)")
-    writevtk(Ω, fname, cellfields=["uh"=>uh,"ph"=>ph, "uadj"=>ϕu,"padj"=>ϕp])
+    dir = "MeshPerturb"
+    mkpath(dir)
+    fname = joinpath(dir,"model-$(i)")
+    writevtk(Ω, fname,nsubcells=order,  cellfields=["uh"=>uh,"ph"=>ph, "uadj"=>ϕu,"padj"=>ϕp])
 
     
     return J1,(J2_1,J2_2,J2_3,J2_4,J2_5)

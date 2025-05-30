@@ -46,9 +46,9 @@ end
 
 
 
-adj_solver = AdjSolver(δ=0.001, opt_alg=:LD_LBFGS)
+adj_solver = AdjSolver(δ=0.001, opt_alg=:LD_MMA)
 
-adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:steady, J)
+adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:unsteady, J)
 solve_adjoint_optimization(adjoint_airfoil_problem)
 
 

@@ -179,7 +179,7 @@ function solve_inc_adj_steady(am::AirfoilModel, simcase::Airfoil,d_boundary::Vec
     mkpath(res_path)
 
     if !isnothing(filename)
-        writevtk(Ω, joinpath(res_path, "$(filename)" * ".vtu"), cellfields=["phi-u" => ϕu, "phi-p" => ϕp, "uh" => uh, "ph" => ph])
+        writevtk(Ω, joinpath(res_path, "$(filename)" * ".vtu"), nsubcells=order, cellfields=["phi-u" => ϕu, "phi-p" => ϕp, "uh" => uh, "ph" => ph])
     end
 
     return ϕu, ϕp

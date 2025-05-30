@@ -205,7 +205,7 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
 
 
     if !isnothing(filename)
-        writevtk(Ω, filename, cellfields=["uh" => uh, "ph" => ph])
+        writevtk(Ω, filename, nsubcells=order,  cellfields=["uh" => uh, "ph" => ph])
     end
     
 

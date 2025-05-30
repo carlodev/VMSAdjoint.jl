@@ -46,10 +46,10 @@ end
 
 
 
-adj_solver = AdjSolver(δ=0.001, opt_alg=:LD_LBFGS)
+adj_solver = AdjSolver(δ=0.0001)
 
 adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:steady, J)
-solve_adjoint_optimization(adjoint_airfoil_problem)
+finite_difference_analysis(adjoint_airfoil_problem)
 
 
 
