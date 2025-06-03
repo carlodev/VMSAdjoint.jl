@@ -1,10 +1,9 @@
 module ParametersAdj
 
-using SegregatedVMSSolver
+
 using Parameters
-using Gridap
-using SegregatedVMSSolver.ParametersDef
 using AirfoilTools
+using SegregatedVMSSolver.ParametersDef
 
 export AirfoilNormals
 export AirfoilScalar

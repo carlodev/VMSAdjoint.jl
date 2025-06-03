@@ -41,7 +41,7 @@ airfoil_case = Airfoil(meshp,simparams,sprob)
 
 function J(CDCL; CLtarget=0.75)
     CD,CL=CDCL
-    return 0.5 * (CL - CLtarget)^2
+    return -CL
 end  
 
 

@@ -1,6 +1,6 @@
 
 
-function solve_adjoint_optimization(adjp::AdjointProblem)
+function solve_adjoint_optimization(adjp::AdjointProblem, parts)
     @unpack solver = adjp
 
     #create initial
@@ -10,21 +10,14 @@ function solve_adjoint_optimization(adjp::AdjointProblem)
     Ndes = length(w_init)
     lb,ub = bounds_w(adjp.adesign,  Ndes)
 
+    @info "Number of Design parameters: $Ndes"
+    f, ∇f! = make_f_and_∇f(adjp, Ndes, parts)
 
-    f, ∇f! = make_f_and_∇f(adjp, Ndes)
 
-
-    ls = LineSearches.BackTracking(
-        c_1 = 1e-3,
-        ρ_hi = 0.9,
-        ρ_lo = 0.25,
-        iterations = 1,
-        order = 3,
-        maxstep = 4e-2,  # ⬅️ controls max step size
-        cache = nothing
-    )    
+   
+    ls = LineSearches.Static()
     # L-BFGS optimizer with line search control
-    result = optimize(f, ∇f!,lb,ub, w_init, Fminbox(LBFGS(linesearch = ls);))
+    result = optimize(f, ∇f!,lb,ub, w_init, Fminbox(LBFGS(alphaguess=0.5,linesearch = ls)))
     
     return true
 end
@@ -67,7 +60,6 @@ end
 mutable struct SharedCache
     fval::Float64
     grad::Vector{Float64}
-    valid::Bool
     iter::Int64
     uh
     ph
@@ -76,10 +68,11 @@ mutable struct SharedCache
     Cp
     adjp::AdjointProblem
     CDCL::Vector{Float64}
+    parts
 end
 
-function make_f_and_∇f(adjp::AdjointProblem, N::Int64)
-    cache = SharedCache(NaN, zeros(N), true, -1, nothing, nothing, [0.0,0.0], nothing,nothing,adjp, [0.0,0.0])
+function make_f_and_∇f(adjp::AdjointProblem, N::Int64, parts)
+    cache = SharedCache(NaN, zeros(N), -1, nothing, nothing, [0.0,0.0], nothing, nothing, adjp, [0.0,0.0], parts)
 
     x_last = similar(zeros(N))
 
@@ -96,12 +89,11 @@ function make_f_and_∇f(adjp::AdjointProblem, N::Int64)
 
         if !isequal(x, x_last)
             copy!(x_last, x)
-            cache.fval, cache.iter, cache.uh, cache.ph, cache.adj_bc, cache.am, cache.Cp = eval_f(x, cache)
+            cache.fval, cache.iter, cache.uh, cache.ph, cache.adj_bc, cache.am, cache.Cp, cache.CDCL  = eval_f(x, cache)
         end
         eval_∇f!(g, x, cache)  # must recompute if f not called
 
         copyto!(cache.grad, g)
-        println("g end = $g")
 
     end
 
@@ -112,7 +104,7 @@ end
 
 function eval_f(w::Vector, cache::SharedCache)
 
-    @unpack  iter, uh, ph, adjp, am= cache
+    @unpack  iter, uh, ph, adjp, am, parts= cache
     @unpack J,adesign, vbcase, timesol,solver = adjp
 
     println("w = $w")
@@ -128,10 +120,9 @@ function eval_f(w::Vector, cache::SharedCache)
     #create the new airfoil model from the weights w
     adesign = create_AirfoilDesign(adesign,w)
     modelname =create_msh(meshinfo,adesign, physicalp ; iter = iter)
-    model = GmshDiscreteModel(modelname)
+    model = GmshDiscreteModel(parts, modelname)
     writevtk(model, "model_$iter")
-    am =  AirfoilModel(model, vbcase; am=am)
-
+    am =  AirfoilModel(model, vbcase, parts, am)
 
     #Solve Primal 
     if timesol==:steady
@@ -140,7 +131,7 @@ function eval_f(w::Vector, cache::SharedCache)
            filename = "sol_$(iter)"
     end
 
-    uh,ph = solve_inc_primal(am, vbcase, filename, timesol; uh0=uh,ph0=ph)    
+    uh,ph = solve_inc_primal(am, vbcase, filename, timesol)    
  
     #### extract results from primal solution: Cp (and Cf)
     PressureCoefficient = get_aerodynamic_features(am,uh,ph)
@@ -151,56 +142,44 @@ function eval_f(w::Vector, cache::SharedCache)
     #### Adjoint Boundary Conditions
     #use the CLCD value to set the Boundary Condition
     adj_bc = -dJobj_fun(J, CDCL)
-    
+    println("Adj bc0 = $adj_bc")
 
     return fval, iter, uh, ph, adj_bc, am, PressureCoefficient, CDCL
 end
 
 
 function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
-    @unpack  iter, uh, ph, adjp, am, adj_bc= cache
-    @unpack J,adesign, vbcase, timesol,solver = adjp
-
+    @unpack  iter, uh, ph, adjp, am, adj_bc, parts= cache
+    @unpack J, vbcase, adesign, timesol,solver = adjp
+    @sunpack D,order = vbcase
+    
     airfoil_case= vbcase
+
+
+    adesign = create_AirfoilDesign(adesign,w)
     uhadj,phadj = solve_inc_adj(am, airfoil_case, adj_bc, "inc-adj-steady-$iter", :steady, uh, ph)
 
-
-    J1ref,(J2_1ref,J2_2ref,J2_3ref,J2_4ref,J2_5ref)= compute_sensitivity(airfoil_case, am,adj_bc, uh,ph,uhadj,phadj, J; i=iter)
-
-
-    
-    Ndes = length(w) #number of design parameters
     δ = solver.δ #0.01
+
+
+  
+    Ndes = length(w) #number of design parameters
     shift = CSTweights(Int(Ndes/2), δ)
     shiftv =   vcat(shift)
 
     
-    J1, (J2_1,J2_2,J2_3,J2_4,J2_5) = iterate_perturbation(shiftv,adesign,am, airfoil_case,adj_bc,uh,ph,uhadj,phadj, J  )
+    J_perturb = iterate_perturbation(shiftv,adesign, am, airfoil_case,uh,ph,uhadj,phadj, J  )
 
-    # shiftv = δ
-    J1s = (J1 .- J1ref)./shiftv
-    J2s1 = (J2_1 .- J2_1ref)./shiftv
-    J2s2 = (J2_2 .- J2_2ref)./shiftv
-    J2s3 = (J2_3 .- J2_3ref)./shiftv
-    J2s4 = (J2_4 .- J2_4ref)./shiftv
-    J2s5 = (J2_5 .- J2_5ref)./shiftv
     
-    
-    J2s = J2s1 + J2s2 + J2s3 + J2s4 + J2s5
-    Jtot = J1s .+ J2s
-    
-    println("Geometric Gradient:")
-    println(J1s)
+    Jtot =  J_perturb 
+   
 
     println("Adjoint Gradient:")
-    println(J2s1)
-    println(J2s2)
-    println(J2s3)
-    println(J2s4)
-    println(J2s5)
-    JtotD = Dict(:J1s=>J1s, :J2s1=>J2s1 , :J2s2=>J2s2 , :J2s3=>J2s3, :J2s4=>J2s4, :J2s5=>J2s5 )
+    println(Jtot)
+ 
+    JtotD = Dict(:Jtot=>Jtot )
     
-    jldsave("results/J$(iter).jld2"; JtotD)
+    jldsave("results/GJ$(iter).jld2"; JtotD)
 
     grad[:] = Jtot 
 
@@ -210,8 +189,9 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
 
     adj_sol = AdjSolution(iter, cache.fval, cache.CDCL, w, grad, am, adj_bc, cache.Cp, uh, ph )
 
+    jldsave("results/SOLUHPH$(iter).jld2"; uh, ph,uhadj,phadj)
 
-    jldsave("results/ADJ_SOL$(iter).jld2"; adj_sol)
+    jldsave("results/ADJ_SOL$(iter).jld2"; adj_sol, uh, ph,uhadj,phadj)
     @info "Iteration $iter completed"
 
 
@@ -220,38 +200,24 @@ end
 
 
 
-function iterate_perturbation(shift::Vector{Float64},adesign::AirfoilDesign,am::AirfoilModel,airfoil_case::Airfoil,adj_bc::Vector{Float64}, uh,ph,uhadj,phadj, J::Function  )
+function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel,airfoil_case::Airfoil, uh,ph,uhadj,phadj, J::Function  )
     Ndes = length(shift)
 
     meshinfo = airfoil_case.meshp.meshinfo
     physicalp =airfoil_case.simulationp.physicalp
-    
-    J1=zeros(Ndes)    #Geometric term
-    J2_1=zeros(Ndes)
-    J2_2=zeros(Ndes)
-    J2_3=zeros(Ndes)
-    J2_4=zeros(Ndes)
-    J2_5=zeros(Ndes)
-
+    Ji = zeros(Ndes)
     for (i,ss) in enumerate(shift)
-        println("Perturbation Domain $i")
+        @info "Perturbation Domain $i"
 
         adesign_tmp = perturb_DesignParameter(adesign, i, ss)
 
         modelname_tmp =create_msh(meshinfo,adesign_tmp, physicalp,"MeshPerturb"; iter = i+100)
-        model_tmp = GmshDiscreteModel(modelname_tmp)
-        am_tmp =  AirfoilModel(model_tmp, airfoil_case, am=am)
+        model_tmp = GmshDiscreteModel(am.parts, modelname_tmp)
+        am_tmp =  AirfoilModel(model_tmp, airfoil_case, am)
 
-        J1tmp,(J2_1tmp,J2_2tmp,J2_3tmp,J2_4tmp,J2_5tmp)= compute_sensitivity(airfoil_case, am_tmp,adj_bc, uh,ph,uhadj,phadj, J; i=i+100)
-
-        J1[i] = J1tmp
-        J2_1[i] = J2_1tmp
-        J2_2[i] = J2_2tmp
-        J2_3[i] = J2_3tmp
-        J2_4[i] = J2_4tmp
-        J2_5[i] = J2_5tmp
+        Ji[i] = compute_sensitivity(am, am_tmp,ss, airfoil_case, uh,ph,uhadj,phadj, J) 
 
     end
     
-    return J1, (J2_1,J2_2,J2_3,J2_4,J2_5)
+    return Ji
 end

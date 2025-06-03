@@ -25,7 +25,7 @@ rbfd = RBFDesign(rbfg, ap0)
 sprob = StabilizedProblem(VMS(2))
 
 physicalp = PhysicalParameters(Re=1000, u_in=[1.0,0.0])
-timep = TimeParameters(dt=0.05, tF=15.0, time_window=(10.0, 15.0))
+timep = TimeParameters(dt=0.25, tF=10.0, time_window=(5.0, 10.0))
 
 meshinfo = AirfoilMesh(AoA= AoA, meshref=2)
 meshp = MeshParameters((1,1), 2, meshinfo)
@@ -39,14 +39,14 @@ airfoil_case = Airfoil(meshp,simparams,sprob)
 
 #Define the Objective Function, first argument [CD,CL], then you can define whatever you want
 
-function J(CDCL; CLtarget=0.75)
+function J(CDCL; CLtarget=0.35)
     CD,CL=CDCL
     return 0.5 * (CL - CLtarget)^2
 end  
 
 
 
-adj_solver = AdjSolver(δ=0.001, opt_alg=:LD_MMA)
+adj_solver = AdjSolver(δ=0.0001, opt_alg=:LD_LBFGS)
 
 adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:unsteady, J)
 solve_adjoint_optimization(adjoint_airfoil_problem)

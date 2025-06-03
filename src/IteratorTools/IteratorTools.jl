@@ -1,21 +1,30 @@
 module IteratorTools
 
+
+using LinearAlgebra
+using Parameters
+using GridapDistributed
+using PartitionedArrays
+using MPI
+using SegregatedVMSSolver
+
+
 using Parameters
 using Gridap
 using GridapGmsh
 using Gridap.FESpaces
 using Gridap.CellData:OperationCellField, GenericMeasure
 using SegregatedVMSSolver.ParametersDef
+
 using AirfoilTools
 using VMSAdjoint.ParametersAdj
 using VMSAdjoint.Interfaces
 using VMSAdjoint.IncompressibleSolvers
 using VMSAdjoint.IncompressibleSolvers: create_primal_spaces,create_adjoint_spaces,solve_inc_primal_steady
 using JLD2
-# using NLopt
+
 using Optim
 using LineSearches
-
 using Interpolations
 using ForwardDiff
 

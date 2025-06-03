@@ -45,6 +45,8 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     @unpack model = am
 
     V,Q = create_primal_spaces(model,simcase)
+    
+    reffe = ReferenceFE(lagrangian, VectorValue{D,Float64}, order )
 
     uin(t) = (t < t_endramp) ? (1.0 - 1 .*(t_endramp-t)/t_endramp) : 1.0
 
@@ -53,6 +55,11 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
 
     u_walls(x,t) = VectorValue(zeros(D)...) 
     u_walls(t::Real) = x -> u_walls(x,t)
+
+    
+    u_rand(x,t) = VectorValue( 100 .*rand(D)...) 
+    u_rand(t::Real) = x -> u_rand(x,t)
+
 
     p0(x,t) = 0.0
     p0(t::Real) = x -> p0(x,t)
@@ -63,25 +70,25 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     Y = TransientMultiFieldFESpace([V, Q])
     X = TransientMultiFieldFESpace([U, P])
 
-    degree = order * 4
+    degree = order * 2
     Ω = Triangulation(model)
     dΩ = Measure(Ω, degree)
+
+    updatekey(am.params,:reffe,reffe)
+
     updatekey(am.params,:Ω,Ω)
     updatekey(am.params,:dΩ,dΩ)
     
-    uh0 = interpolate(u0(0.0), U(0.0))
-    ph0 = interpolate(p0(0.0), P(0.0))
-
-    if isnothing(uh00)
-        #initialize with steady solution
-        uh00,ph00 = solve_inc_primal_steady(am, simcase, nothing, uh00,uh00)
+    uh0 = interpolate_everywhere(u_walls(0.0), U(0.0))
+    ph0 = interpolate_everywhere(u_walls(0.0), P(0.0))
+ 
+      if isnothing(uh00)
+        #  initialize with steady solution
+          uh0,ph0 = solve_inc_primal_steady(am, simcase, "Results/init_steady", uh00,uh00)
     end
 
-    uh0.free_values .=  uh00.free_values
-    ph0.free_values .=  ph00.free_values
-
-
-    xh0 = interpolate([uh0, ph0], X(0.0))
+   
+    xh0 = interpolate_everywhere([uh0, ph0], X(0.0))
 
     updatekey(am.params, :uh,uh0)
     m, res, rhs =  equations_primal( simcase, am.params,:unsteady)
@@ -94,8 +101,8 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
 
     sol = Gridap.solve(ode_solver, op, xh0, t0, tF)
 
-    UH = [copy(uh0.free_values)]
-    PH = [copy(ph0.free_values)]
+    UH = [copy(uh0)]
+    PH = [copy(ph0)]
     
 
     res_path = "Results_unsteady_primal"
@@ -105,11 +112,15 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
         for (idx,(xhtn, t)) in enumerate(sol)
             uh = xhtn[1]
             ph = xhtn[2]
-            push!(UH, copy(uh.free_values))
-            push!(PH, copy(ph.free_values))
+            push!(UH, copy(uh))
+            push!(PH, copy(ph))
             println("Primal solved at time step $t")
 
-            copyto!(am.params[:uh].free_values,uh.free_values)
+            if idx == 2
+                uh = interpolate(u_rand, U(t))
+            end
+
+            updatekey(am.params, :uh,uh)
 
             jldsave("UHPH.jld2"; UH,PH)
             
@@ -156,15 +167,20 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
     @unpack model = am
     V,Q = create_primal_spaces(model,simcase)
 
+
+    reffe = ReferenceFE(lagrangian, VectorValue{D,Float64}, order )
+    VV0 = FESpace(model, reffe; conformity=:H1)
+
+
     u0 = VectorValue(u_in...)
     u_walls = VectorValue(zeros(D)...) 
     p0 = 0.0
 
     U = TrialFESpace(V, [u0, u0, u_walls])
     P = TrialFESpace(Q, [p0])
-    
-    updatekey(am.params,:U,U)
-    updatekey(am.params,:P,P)
+
+    updatekey(am.params,:reffe,reffe)
+    updatekey(am.params,:VV0,VV0)
 
     Y = MultiFieldFESpace([V, Q])
     X = MultiFieldFESpace([U, P])
@@ -172,11 +188,9 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
     degree = order*2
     Ω = Triangulation(model)
     dΩ = Measure(Ω, degree)
+
     updatekey(am.params,:Ω,Ω)
     updatekey(am.params,:dΩ,dΩ)
-
-    # GridapPETSc.with(args=split(petsc_options)) do
-
 
     ls = LUSolver()
     # ls = BackslashSolver()
@@ -185,7 +199,7 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
     # solver = PETScLinearSolver()
 
 
-    uh = interpolate(u0, U)
+    uh = interpolate(u_walls, U)
     ph = interpolate(0.0, P)
  
     if !isnothing(uh00)
@@ -196,13 +210,26 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
          ph.free_values .=  ph00.free_values
      end
 
-    for i = 1:4
+
+     for i = 1:5
+
+     xh = interpolate_everywhere([uh, ph], X)
+     updatekey(am.params, :uh,uh)
+
+     res, rhs = equations_primal( simcase,am.params,:steady)
+     println(" before AffineFEOperator ")
+     op = AffineFEOperator(res, rhs, X, Y)
+     println("after op ")
+
         println(i)
-        uh,ph = solve_steady_primal(uh,ph,X,Y,simcase, am.params,solver )
+        @info "solving steady problem..."
+
+        # Gridap.solve!(xh, solver, op)
+        Gridap.solve!(xh, solver, op)
+        uh, ph = xh 
+        updatekey(am.params, :uh,uh)
+
     end
-
-    # end #end GridapPETSc
-
 
     if !isnothing(filename)
         writevtk(Ω, filename, nsubcells=order,  cellfields=["uh" => uh, "ph" => ph])
@@ -212,20 +239,4 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
     return uh,ph
 end
 
-function solve_steady_primal(uh,ph,X,Y,simcase, params,solver )
-    xh = interpolate([uh, ph], X)
 
-    updatekey(params, :uh,uh)
-    res, rhs = equations_primal( simcase,params,:steady)
-
-    op = AffineFEOperator(res, rhs, X, Y)
-
-  
-    @info "solving steady problem..."
-
-    # Gridap.solve!(xh, solver, op)
-    Gridap.solve!(xh, solver, op)
-
-    uh, ph = xh 
-    return  uh, ph
-end

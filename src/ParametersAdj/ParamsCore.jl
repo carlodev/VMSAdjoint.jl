@@ -6,9 +6,10 @@ end
 
 struct AirfoilModel
     ap::AirfoilPoints
-    model::Gridap.Geometry.UnstructuredDiscreteModel
+    model
     an::AirfoilNormals
     params::Dict{Symbol,Any}
+    parts
 end
 
 struct AirfoilScalar

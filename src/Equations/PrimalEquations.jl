@@ -7,9 +7,16 @@ function equations_primal( simcase::Airfoil,params::Dict{Symbol,Any},::Val{:stea
     @unpack uh = params
 
     _,_,Auu,Aup,Apu,App,_,_,rhs_v = segregated_equations(uh,params,simcase)
-    res_prim((u, p), (v, q)) = Auu(u,v) + Aup(p,v) + Apu(u,q) + App(p,q)
+    function res_prim((u, p), (v, q))
+        println("in res_prim")
+    Auu(u,v) + Aup(p,v) + Apu(u,q) + App(p,q)
+end
 
-    rhs((v,q)) = rhs_v(v)
+    function rhs((v,q))
+        println("in rhs_v")
+
+    rhs_v(v)
+end
 
     return res_prim, rhs
 end

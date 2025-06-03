@@ -41,12 +41,12 @@ airfoil_case = Airfoil(meshp,simparams,sprob)
 
 function J(CDCL; CLtarget=0.75)
     CD,CL=CDCL
-    return 0.5 * (CL - CLtarget)^2
+    return -CL #0.5 * (CL - CLtarget)^2
 end  
 
 
 
-adj_solver = AdjSolver(δ=0.001, opt_alg=:LD_LBFGS)
+adj_solver = AdjSolver(δ=0.0001, opt_alg=:LD_LBFGS)
 
 adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:steady, J)
 solve_adjoint_optimization(adjoint_airfoil_problem)

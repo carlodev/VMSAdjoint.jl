@@ -16,7 +16,7 @@ It computes Drag and Lift over airfoil boundary. It takes into account pressure 
 It needs the normals pointings outward respect to the body.
 """
 
-function compute_airfoil_forces(uh::SingleFieldFEFunction, ph::SingleFieldFEFunction, nΓ::OperationCellField, dΓ::GenericMeasure, ν::Float64)
+function compute_airfoil_forces(uh, ph, nΓ, dΓ, ν::Float64)
     IForce = ∫(-ph ⋅ nΓ + ν * (∇(uh) + transpose(∇(uh))) ⋅ nΓ)dΓ #+ 
     D, L = sum(IForce)
     return D, L
@@ -27,7 +27,7 @@ end
 
 Compute the normaization of airfoil forces, obtaining CD and CL
 """
-function compute_airfoil_coefficients(uh::SingleFieldFEFunction, ph::SingleFieldFEFunction, nΓ::OperationCellField, dΓ::GenericMeasure, physicalp::PhysicalParameters)
+function compute_airfoil_coefficients(uh, ph, nΓ, dΓ, physicalp::PhysicalParameters)
     @unpack c, u_in_mag, ν = physicalp
 
     q = 0.5 * c * u_in_mag
