@@ -57,10 +57,6 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     u_walls(t::Real) = x -> u_walls(x,t)
 
     
-    u_rand(x,t) = VectorValue( 100 .*rand(D)...) 
-    u_rand(t::Real) = x -> u_rand(x,t)
-
-
     p0(x,t) = 0.0
     p0(t::Real) = x -> p0(x,t)
 
@@ -79,13 +75,13 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     updatekey(am.params,:Ω,Ω)
     updatekey(am.params,:dΩ,dΩ)
     
-    uh0 = interpolate_everywhere(u_walls(0.0), U(0.0))
-    ph0 = interpolate_everywhere(u_walls(0.0), P(0.0))
+    uh0 = interpolate_everywhere(u0(0.0), U(0.0))
+    ph0 = interpolate_everywhere(0.0, P(0.0))
  
-      if isnothing(uh00)
-        #  initialize with steady solution
-          uh0,ph0 = solve_inc_primal_steady(am, simcase, "Results/init_steady", uh00,uh00)
-    end
+    # if isnothing(uh00)
+    #     #  initialize with steady solution
+    #       uh0,ph0 = solve_inc_primal_steady(am, simcase, "Results/init_steady", uh00,uh00)
+    # end
 
    
     xh0 = interpolate_everywhere([uh0, ph0], X(0.0))
@@ -116,14 +112,8 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
             push!(PH, copy(ph))
             println("Primal solved at time step $t")
 
-            if idx == 2
-                uh = interpolate(u_rand, U(t))
-            end
-
             updatekey(am.params, :uh,uh)
 
-            jldsave("UHPH.jld2"; UH,PH)
-            
             if mod(idx,1)==0
                 pvd[t] = createvtk(Ω, joinpath(res_path, "$(filename)_$t" * ".vtu"), cellfields=["uh" => uh, "ph" => ph])
             end
