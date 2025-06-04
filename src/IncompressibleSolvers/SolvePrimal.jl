@@ -54,6 +54,9 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     u_walls(x,t) = VectorValue(zeros(D)...) 
     u_walls(t::Real) = x -> u_walls(x,t)
 
+    u_rand(x,t) = VectorValue(100 .* rand(D)) 
+    u_rand(t::Real) = x -> u_rand(x,t)
+
     p0(x,t) = 0.0
     p0(t::Real) = x -> p0(x,t)
 
@@ -63,7 +66,10 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     Y = TransientMultiFieldFESpace([V, Q])
     X = TransientMultiFieldFESpace([U, P])
 
-    degree = order * 4
+    create_VV0!(D, order, model, am)
+
+    
+    degree = order * 2
     Ω = Triangulation(model)
     dΩ = Measure(Ω, degree)
     updatekey(am.params,:Ω,Ω)
@@ -108,11 +114,9 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
             push!(UH, copy(uh.free_values))
             push!(PH, copy(ph.free_values))
             println("Primal solved at time step $t")
-
+                 
             copyto!(am.params[:uh].free_values,uh.free_values)
-
-            jldsave("UHPH.jld2"; UH,PH)
-            
+           
             if mod(idx,1)==0
                 pvd[t] = createvtk(Ω, joinpath(res_path, "$(filename)_$t" * ".vtu"), cellfields=["uh" => uh, "ph" => ph])
             end
@@ -168,6 +172,8 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
 
     Y = MultiFieldFESpace([V, Q])
     X = MultiFieldFESpace([U, P])
+    
+    create_VV0!(D, order, model, am)
 
     degree = order*2
     Ω = Triangulation(model)
@@ -228,4 +234,13 @@ function solve_steady_primal(uh,ph,X,Y,simcase, params,solver )
 
     uh, ph = xh 
     return  uh, ph
+end
+
+
+function create_VV0!(D::Int64, order, model, am)
+    reffe = ReferenceFE(lagrangian, VectorValue{D,Float64}, order )
+    VV0 = FESpace(model, reffe; conformity=:H1)
+    updatekey(am.params,:reffe,reffe)
+    updatekey(am.params,:VV0,VV0)
+
 end

@@ -1,3 +1,4 @@
+
 using Gmsh
 import Gmsh: gmsh
 
@@ -76,19 +77,19 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
     Lback = 8*chord
     H= 8*chord
     offset =2.35
-    
+    slant = 2.0
     
     gmsh.model.geo.addPoint(Lback, -H, 0)
     gmsh.model.geo.addPoint(Lback, H, 0)
     
     gmsh.model.geo.addPoint(0.0, -H, 0)
-    gmsh.model.geo.addPoint(chord, -H, 0)
+    gmsh.model.geo.addPoint(chord + slant , -H, 0)
     
     pback = rotate_points([Lback,0.0], AoA)
     gmsh.model.geo.addPoint(Lback, pback[2], 0)
 
     
-    gmsh.model.geo.addPoint(chord, H, 0)
+    gmsh.model.geo.addPoint(chord + slant, H, 0)
     gmsh.model.geo.addPoint(0.0, H, 0)
     
     # gmsh.model.geo.addPoint(Lfront, 0.0, 0)
@@ -124,8 +125,8 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
 
     trailing = gmsh.model.geo.addPoint(trailing_coordinate[1],trailing_coordinate[2], 0)
 
-    trailing_e_top = gmsh.model.geo.addPoint(trailing_coordinate[1],trailing_coordinate[2]+offset, 0)
-    trailing_e_bottom = gmsh.model.geo.addPoint(trailing_coordinate[1],trailing_coordinate[2]-offset, 0)
+    trailing_e_top = gmsh.model.geo.addPoint(trailing_coordinate[1] + slant,trailing_coordinate[2]+offset, 0)
+    trailing_e_bottom = gmsh.model.geo.addPoint(trailing_coordinate[1] + slant,trailing_coordinate[2]-offset, 0)
 
 
     top_le_point = leading_edge_points[end]
@@ -210,7 +211,7 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
     
     #vertical outer lines
     for i in [20,13,8,21,15,5]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, 10, "Progression", 1.0)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, 40, "Progression", 1.02)
     end
 
     if mesh_ref ==0
@@ -222,7 +223,7 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
         
     #vertical inner lines
     for i in [7,11,22,23,12,6]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(60*corr), Int32(round(70*mesh_ref))]), "Progression", 1.12) # 1.02
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(60*corr), Int32(round(70*mesh_ref))]), "Progression", 1.05) # 1.02
     end
     
     
@@ -234,19 +235,19 @@ function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0
 
     #top airfoil
     for i in [24,17,3]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(100*corr), Int32(round(60*mesh_ref))]), "Progression", 1.0)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(100*corr), Int32(round(50*mesh_ref))]), "Progression", 1.0)
     end
     
     #bottom airfoil
     for i in [25,18,1]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(100*corr), Int32(round(60*mesh_ref))]), "Progression", 1.0)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(100*corr), Int32(round(50*mesh_ref))]), "Progression", 1.0)
     end
     
  
     
     #Shear Curves
     for i in [4,14,10,16,2]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(40*corr), Int32(round(60*mesh_ref))]), "Progression", 1.1)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(40*corr), Int32(round(30*mesh_ref))]), "Progression", 1.05)
     end
     
     

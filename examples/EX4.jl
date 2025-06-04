@@ -25,7 +25,7 @@ rbfd = RBFDesign(rbfg, ap0)
 sprob = StabilizedProblem(VMS(2))
 
 physicalp = PhysicalParameters(Re=1000, u_in=[1.0,0.0])
-timep = TimeParameters(dt=0.05, tF=15.0, time_window=(10.0, 15.0))
+timep = TimeParameters(dt=0.05, tF=1.0, time_window=(0.5, 1.0))
 
 meshinfo = AirfoilMesh(AoA= AoA, meshref=2)
 meshp = MeshParameters((1,1), 2, meshinfo)

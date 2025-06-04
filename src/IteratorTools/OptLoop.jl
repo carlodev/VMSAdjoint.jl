@@ -10,30 +10,17 @@ function solve_adjoint_optimization(adjp::AdjointProblem)
     Ndes = length(w_init)
     lb,ub = bounds_w(adjp.adesign,  Ndes)
 
-
+    @info "Number of Design parameters: $Ndes"
     f, ∇f! = make_f_and_∇f(adjp, Ndes)
 
 
-    ls = LineSearches.BackTracking(
-        c_1 = 1e-3,
-        ρ_hi = 0.9,
-        ρ_lo = 0.25,
-        iterations = 1,
-        order = 3,
-        maxstep = 4e-2,  # ⬅️ controls max step size
-        cache = nothing
-    )    
+   
+    ls = LineSearches.Static()
     # L-BFGS optimizer with line search control
-    result = optimize(f, ∇f!,lb,ub, w_init, Fminbox(LBFGS(linesearch = ls);))
+    result = optimize(f, ∇f!,lb,ub, w_init, Fminbox(LBFGS(alphaguess=0.5,linesearch = ls)))
     
     return true
 end
-
-
-
-
-
-
 
 
 function bounds_w(adesign::RBFDesign, Ndes::Int64)
@@ -92,17 +79,13 @@ function make_f_and_∇f(adjp::AdjointProblem, N::Int64)
     end
 
     ∇f!(g, x) = begin
-        println("g start = $g")
 
         if !isequal(x, x_last)
             copy!(x_last, x)
             cache.fval, cache.iter, cache.uh, cache.ph, cache.adj_bc, cache.am, cache.Cp = eval_f(x, cache)
         end
         eval_∇f!(g, x, cache)  # must recompute if f not called
-
         copyto!(cache.grad, g)
-        println("g end = $g")
-
     end
 
     return f, ∇f!
@@ -129,6 +112,7 @@ function eval_f(w::Vector, cache::SharedCache)
     adesign = create_AirfoilDesign(adesign,w)
     modelname =create_msh(meshinfo,adesign, physicalp ; iter = iter)
     model = GmshDiscreteModel(modelname)
+
     writevtk(model, "model_$iter")
     am =  AirfoilModel(model, vbcase; am=am)
 
@@ -162,49 +146,27 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
     @unpack J,adesign, vbcase, timesol,solver = adjp
 
     airfoil_case= vbcase
+    adesign = create_AirfoilDesign(adesign,w)
+
+
     uhadj,phadj = solve_inc_adj(am, airfoil_case, adj_bc, "inc-adj-steady-$iter", :steady, uh, ph)
 
 
-    J1ref,(J2_1ref,J2_2ref,J2_3ref,J2_4ref,J2_5ref)= compute_sensitivity(airfoil_case, am,adj_bc, uh,ph,uhadj,phadj, J; i=iter)
-
-
-    
     Ndes = length(w) #number of design parameters
     δ = solver.δ #0.01
     shift = CSTweights(Int(Ndes/2), δ)
     shiftv =   vcat(shift)
 
     
-    J1, (J2_1,J2_2,J2_3,J2_4,J2_5) = iterate_perturbation(shiftv,adesign,am, airfoil_case,adj_bc,uh,ph,uhadj,phadj, J  )
+    Jtot = iterate_perturbation(shiftv,adesign,am, airfoil_case,uh,ph,uhadj,phadj )
+    @info "Gradient: $Jtot"
+    
 
-    # shiftv = δ
-    J1s = (J1 .- J1ref)./shiftv
-    J2s1 = (J2_1 .- J2_1ref)./shiftv
-    J2s2 = (J2_2 .- J2_2ref)./shiftv
-    J2s3 = (J2_3 .- J2_3ref)./shiftv
-    J2s4 = (J2_4 .- J2_4ref)./shiftv
-    J2s5 = (J2_5 .- J2_5ref)./shiftv
-    
-    
-    J2s = J2s1 + J2s2 + J2s3 + J2s4 + J2s5
-    Jtot = J1s .+ J2s
-    
-    println("Geometric Gradient:")
-    println(J1s)
-
-    println("Adjoint Gradient:")
-    println(J2s1)
-    println(J2s2)
-    println(J2s3)
-    println(J2s4)
-    println(J2s5)
-    JtotD = Dict(:J1s=>J1s, :J2s1=>J2s1 , :J2s2=>J2s2 , :J2s3=>J2s3, :J2s4=>J2s4, :J2s5=>J2s5 )
-    
-    jldsave("results/J$(iter).jld2"; JtotD)
+    jldsave("results/J$(iter).jld2"; Jtot)
 
     grad[:] = Jtot 
 
-
+    
     #update values iteration
 
 
@@ -218,40 +180,24 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
 end
 
 
-
-
-function iterate_perturbation(shift::Vector{Float64},adesign::AirfoilDesign,am::AirfoilModel,airfoil_case::Airfoil,adj_bc::Vector{Float64}, uh,ph,uhadj,phadj, J::Function  )
+function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel,airfoil_case::Airfoil, uh,ph,uhadj,phadj  )
     Ndes = length(shift)
 
     meshinfo = airfoil_case.meshp.meshinfo
     physicalp =airfoil_case.simulationp.physicalp
-    
-    J1=zeros(Ndes)    #Geometric term
-    J2_1=zeros(Ndes)
-    J2_2=zeros(Ndes)
-    J2_3=zeros(Ndes)
-    J2_4=zeros(Ndes)
-    J2_5=zeros(Ndes)
-
+    Ji = zeros(Ndes)
     for (i,ss) in enumerate(shift)
-        println("Perturbation Domain $i")
+        @info "Perturbation Domain $i"
 
         adesign_tmp = perturb_DesignParameter(adesign, i, ss)
 
         modelname_tmp =create_msh(meshinfo,adesign_tmp, physicalp,"MeshPerturb"; iter = i+100)
         model_tmp = GmshDiscreteModel(modelname_tmp)
-        am_tmp =  AirfoilModel(model_tmp, airfoil_case, am=am)
+        am_tmp =  AirfoilModel(model_tmp, airfoil_case; am=am)
 
-        J1tmp,(J2_1tmp,J2_2tmp,J2_3tmp,J2_4tmp,J2_5tmp)= compute_sensitivity(airfoil_case, am_tmp,adj_bc, uh,ph,uhadj,phadj, J; i=i+100)
-
-        J1[i] = J1tmp
-        J2_1[i] = J2_1tmp
-        J2_2[i] = J2_2tmp
-        J2_3[i] = J2_3tmp
-        J2_4[i] = J2_4tmp
-        J2_5[i] = J2_5tmp
+        Ji[i] = compute_sensitivity(am, am_tmp,ss, airfoil_case, uh,ph,uhadj,phadj) 
 
     end
     
-    return J1, (J2_1,J2_2,J2_3,J2_4,J2_5)
+    return Ji
 end
