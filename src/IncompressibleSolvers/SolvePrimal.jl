@@ -89,16 +89,16 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     updatekey(am.params, :uh,uh0)
     m, res, rhs =  equations_primal( simcase, am.params,:unsteady)
 
-    op = TransientAffineFEOperator(m, res, rhs, X, Y)
+    op = TransientLinearFEOperator( (m, res), rhs, X, Y)
 
     ls = LUSolver()
 
     ode_solver = ThetaMethod(ls,dt,θ)
 
-    sol = Gridap.solve(ode_solver, op, xh0, t0, tF)
+    sol = Gridap.solve(ode_solver, op, t0, tF, xh0)
 
-    UH = [copy(uh0)]
-    PH = [copy(ph0)]
+    # UH = [uh0]
+    # PH = [ph0]
     
 
     res_path = "Results_unsteady_primal"
@@ -121,10 +121,10 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
         end
     end
 
-    avg_UH,avg_PH = time_average_fields(UH,PH, time_window,dt, t0)
+    # avg_UH,avg_PH = time_average_fields(UH,PH, time_window,dt, t0)
 
-    uh0.free_values .=  avg_UH
-    ph0.free_values .=  avg_PH
+    # uh0.free_values .=  avg_UH
+    # ph0.free_values .=  avg_PH
     
     return uh0,ph0
 
