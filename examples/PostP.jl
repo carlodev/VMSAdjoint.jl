@@ -53,8 +53,30 @@ lb,ub = bounds_w(rbfd0,40)
 
 
 adj_sol0 = load("results/ADJ_SOL0.jld2")["adj_sol"]
+
+using CSV, DataFrames
+
+A = hcat([reverse(adj_sol0.airfoil_model.ap.xl); adj_sol0.airfoil_model.ap.xu],
+[reverse(adj_sol0.airfoil_model.ap.yl); adj_sol0.airfoil_model.ap.yu])
+
+CSV.write("ADJ1.csv", DataFrame(A, :auto))
+
+
+fd = ([-0.13121899574718598, -0.13120529679026635] .+ 0.13113186834547236)./0.0001
+
+J0 = load("results/J0.jld2")["Jtot"]
+
+plot(J0[1:20])
+scatter!(fd)
+
+plot( vcat( -J0[1:20], reverse(J0[21:end]),))  
+scatter!(-fd)
+
+
+
+
 w0 = adj_sol0.βv
-J0 = load("results/J0.jld2")["JtotD"]
+
 Jtot0 = sum([J0[:J1s],J0[:J2s1],J0[:J2s2],J0[:J2s3],J0[:J2s4],J0[:J2s5]])
 
 δ = 0.001 .* [ones(20); -ones(20)]
