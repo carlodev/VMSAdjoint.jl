@@ -12,6 +12,7 @@ function compute_sensitivity(am0::AirfoilModel,am1::AirfoilModel,  δ::Float64, 
 
     @sunpack D,order,u_in, ν = simcase
     @unpack VV0, dΩ, reffe = am0.params
+    @unpack tΓ, nΓ, dΓ = am0.params
 
     function fx(x)
         return x
@@ -23,20 +24,10 @@ function compute_sensitivity(am0::AirfoilModel,am1::AirfoilModel,  δ::Float64, 
     vi = (m1-m0)./ δ
 
     v_field = FEFunction(VV0,vi)
-   
 
-    # Convective terms
-    conv1 = transpose(∇(uh)) ⋅ uhadj ⊗ uh
-    conv2 = uhadj ⊗ (∇(uh) ⋅ uh)
+    #-2 coming from the derivative of dCL/dβ or dCD/dβ; to be adjusted if more complex derivations
+    J_sens = -2 .*    sum(-ν* ∫( ((∇(uh) ⋅ tΓ) ⋅ nΓ) * ((∇(uhadj) ⋅ tΓ) ⋅ nΓ) ⋅ (v_field ⋅nΓ) )dΓ)
 
-    # Pressure and continuity terms
-    pres = ∇(ph) ⊙ uhadj
-    cont = (∇⋅(uh)) ⊗ phadj
-
-    # Full T tensor
-    T = 2ν * (ε(uh) ⊙ ε(uhadj))+  conv1 + conv2 + pres + cont
-    J2 = sum(∫( T ⊙ ∇(v_field) )dΩ) 
-
-    return J2
+    return J_sens
     
 end

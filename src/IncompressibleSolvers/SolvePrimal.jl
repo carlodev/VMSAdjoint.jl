@@ -28,6 +28,10 @@ function solve_inc_primal(am::AirfoilModel, simcase::Airfoil, ::Val{:unsteady}; 
 end
 
 
+function rotation(n::VectorValue{2,Float64})
+    n1, n2 = [n...] ./ norm(n)
+    VectorValue(-n2, n1)
+end
 
 function create_primal_spaces(model, simcase::Airfoil)
     @sunpack tagname, order, D = simcase
@@ -64,7 +68,7 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     Y = TransientMultiFieldFESpace([V, Q])
     X = TransientMultiFieldFESpace([U, P])
 
-    create_VV0!(D, order, model, am)
+    setup_shape_opt_spaces!(D, order, model, am)
 
     
     degree = order * 2
@@ -171,7 +175,7 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
     Y = MultiFieldFESpace([V, Q])
     X = MultiFieldFESpace([U, P])
     
-    create_VV0!(D, order, model, am)
+    setup_shape_opt_spaces!(D, order, model, am)
 
     degree = order*2
     Ω = Triangulation(model)
@@ -230,10 +234,20 @@ function solve_steady_primal(uh,ph,X,Y,simcase, params,solver )
 end
 
 
-function create_VV0!(D::Int64, order, model, am)
+function setup_shape_opt_spaces!(D::Int64, order::Int64, model, am::AirfoilModel)
     reffe = ReferenceFE(lagrangian, VectorValue{D,Float64}, order )
     VV0 = FESpace(model, reffe; conformity=:H1)
+
+    Γ = BoundaryTriangulation(am.model; tags="airfoil")
+    dΓ = Measure(Γ, order*2)
+    nΓ = -get_normal_vector(Γ) #beacuse they point inward 
+    tΓ = rotation ∘ nΓ
+
     updatekey(am.params,:reffe,reffe)
     updatekey(am.params,:VV0,VV0)
-
+    updatekey(am.params,:Γ,Γ)
+    updatekey(am.params,:dΓ,dΓ)
+    updatekey(am.params,:nΓ,nΓ)
+    updatekey(am.params,:tΓ,tΓ)
+    
 end

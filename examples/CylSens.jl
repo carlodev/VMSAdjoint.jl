@@ -49,7 +49,4 @@ end
 
 
 
-adj_solver = AdjSolver(δ=0.0001, αg = 2.0)
 
-adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:unsteady, J)
-solve_adjoint_optimization(adjoint_airfoil_problem)
