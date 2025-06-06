@@ -54,8 +54,6 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     u_walls(x,t) = VectorValue(zeros(D)...) 
     u_walls(t::Real) = x -> u_walls(x,t)
 
-    u_rand(x,t) = VectorValue(100 .* rand(D)) 
-    u_rand(t::Real) = x -> u_rand(x,t)
 
     p0(x,t) = 0.0
     p0(t::Real) = x -> p0(x,t)
@@ -92,13 +90,13 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     updatekey(am.params, :uh,uh0)
     m, res, rhs =  equations_primal( simcase, am.params,:unsteady)
 
-    op = TransientAffineFEOperator(m, res, rhs, X, Y)
+    op = TransientLinearFEOperator((res, m), rhs, X, Y)
 
     ls = LUSolver()
 
     ode_solver = ThetaMethod(ls,dt,θ)
 
-    sol = Gridap.solve(ode_solver, op, xh0, t0, tF)
+    sol = Gridap.solve(ode_solver, op, t0, tF, xh0)
 
     UH = [copy(uh0.free_values)]
     PH = [copy(ph0.free_values)]
@@ -108,7 +106,8 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     mkpath(res_path)
 
     createpvd(filename) do pvd
-        for (idx,(xhtn, t)) in enumerate(sol)
+        pvd[0] = createvtk(Ω, nsubcells = order, joinpath(res_path, "$(filename)_0" * ".vtu"), cellfields=["uh" => uh0, "ph" => ph0])
+        for (idx,(t, xhtn)) in enumerate(sol)
             uh = xhtn[1]
             ph = xhtn[2]
             push!(UH, copy(uh.free_values))
@@ -117,8 +116,8 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
                  
             copyto!(am.params[:uh].free_values,uh.free_values)
            
-            if mod(idx,1)==0
-                pvd[t] = createvtk(Ω, joinpath(res_path, "$(filename)_$t" * ".vtu"), cellfields=["uh" => uh, "ph" => ph])
+            if mod(idx,20)==0
+                pvd[t] = createvtk(Ω, nsubcells = order, joinpath(res_path, "$(filename)_$t" * ".vtu"), cellfields=["uh" => uh, "ph" => ph])
             end
 
         end
@@ -132,7 +131,6 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     return uh0,ph0
 
 end
-
 
 
 function time_average_fields(UH,PH, time_window,dt::Float64, t0::Float64)
@@ -181,15 +179,11 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
     updatekey(am.params,:Ω,Ω)
     updatekey(am.params,:dΩ,dΩ)
 
-    # GridapPETSc.with(args=split(petsc_options)) do
 
 
     ls = LUSolver()
-    # ls = BackslashSolver()
 
     solver = LinearFESolver(ls)
-    # solver = PETScLinearSolver()
-
 
     uh = interpolate(u0, U)
     ph = interpolate(0.0, P)
@@ -207,11 +201,10 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
         uh,ph = solve_steady_primal(uh,ph,X,Y,simcase, am.params,solver )
     end
 
-    # end #end GridapPETSc
 
 
     if !isnothing(filename)
-        writevtk(Ω, filename, nsubcells=order,  cellfields=["uh" => uh, "ph" => ph])
+        writevtk(Ω, nsubcells=order, filename,  cellfields=["uh" => uh, "ph" => ph])
     end
     
 

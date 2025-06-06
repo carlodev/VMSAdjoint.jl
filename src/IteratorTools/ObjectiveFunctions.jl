@@ -1,10 +1,3 @@
-###################################################################################
-#OBJECTIVE FUNCTIONS
-##################################################################################
-
-
-
-
 
 ###################################################################################
 #Iterators
@@ -44,11 +37,10 @@ end
 
 
 """
-    obj_fun(am::AirfoilModel, mcase::AdjointProblem, uh_vec::AbstractVector,ph_vec::AbstractVector, fun)
+    obj_fun(am::AirfoilModel, vbcase::AdjointProblem, uh, ph, fun::Function)
 
-Wrapper that evaluates `fun` the objective function. `fun` is a user-defined function.
-See eg. `compute_drag`, `compute_lift` functions. It return fitnessval,E. 
-`fitnessval` is the function value that need to be minimized. `E` is a value that we want to monitor.
+It computes the value of the objective function fun. It has a penalty to have a minimum thickness.
+It gives fitnessvalue, [CD,CL]
 """
 function obj_fun(am::AirfoilModel, vbcase::Airfoil, uh, ph, fun::Function)
     @sunpack order = vbcase
@@ -129,6 +121,10 @@ function thickness_penalty(am::AirfoilModel; tmin=0.005, α=1_000.0)
     return penalty * α
 end
 
+"""
+    dJobj_fun(fun::Function, CDCL::Vector{Float64})
+Automatic Differentiation to compute the Adjoint Boundary Conditions from the objective function
+"""
 function dJobj_fun(fun::Function, CDCL::Vector{Float64})
     @assert length(CDCL) == 2
     ForwardDiff.gradient(x -> fun(x), CDCL)

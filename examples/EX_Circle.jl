@@ -5,27 +5,30 @@ using Gridap, GridapGmsh
 using SegregatedVMSSolver.ParametersDef
 
 
-fname = "n0012.csv" #airfoil coordinates to load
-AoA = 4.0
+AoA = 2.5
+meshinfo = AirfoilMesh(AoA=AoA, meshref=2)
+physicalp = PhysicalParameters(Re=1000, u_in=[1.0,0.0])
 
-ap0 = get_airfoil_coordinates(joinpath(@__DIR__, fname))
+xx = collect(0.0:0.01:1.0)
+yy = (0.5^2 .-(xx.-0.5).^2).^0.5
+ap1 = AirfoilPoints(reverse(xx),xx,reverse(yy),-yy)
 
 control_px = collect(LinRange(0.05,0.95,20))
 
 control_points = ControlPoints(control_px,control_px)
 
-
-R = 0.15 #support radius. If is bigger, the deformation radius increases, try increasing it
+R = 1.5
 RBFfun = RBFFunctionLocalSupport(RBF_CP4, R)
 
+
 rbfg = RBFGeometry(control_points,RBFfun)
-rbfd = RBFDesign(rbfg, ap0)
+rbfd = RBFDesign(rbfg, ap1)
 
 
 sprob = StabilizedProblem(VMS(2))
 
 physicalp = PhysicalParameters(Re=1000, u_in=[1.0,0.0])
-timep = TimeParameters(dt=0.05, tF=1.0, time_window=(0.5, 1.0))
+timep = TimeParameters(dt=0.25, tF=10.0, time_window=(8.0, 10.0))
 
 meshinfo = AirfoilMesh(AoA= AoA, meshref=2)
 meshp = MeshParameters((1,1), 2, meshinfo)
@@ -41,16 +44,12 @@ airfoil_case = Airfoil(meshp,simparams,sprob)
 
 function J(CDCL; CLtarget=0.75)
     CD,CL=CDCL
-    return 0.5 * (CL - CLtarget)^2
+    return CD #0.5 * (CL - CLtarget)^2
 end  
 
 
 
-adj_solver = AdjSolver(δ=0.001, opt_alg=:LD_MMA)
+adj_solver = AdjSolver(δ=0.0001)
 
 adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:unsteady, J)
 solve_adjoint_optimization(adjoint_airfoil_problem)
-
-
-
-

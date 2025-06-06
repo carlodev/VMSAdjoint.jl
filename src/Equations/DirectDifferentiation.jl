@@ -1,5 +1,5 @@
 ######################################################
-#Steady Direct Differentiation
+#Steady Direct Differentiation -- NOT WORKING
 #######################################################
 function eq_direct_differentiation_steady(params::Dict{Symbol,Any})
     @unpack method, D,dΩ= params

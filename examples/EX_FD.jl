@@ -3,7 +3,12 @@ using AirfoilTools
 using VMSAdjoint
 using Gridap, GridapGmsh
 using SegregatedVMSSolver.ParametersDef
+"""
+Example taken from:
+Sorgiovanni, G., Quadrio, M., Ponzini, R., 2016. A robust open-source adjoint optimization method for external aerodynamics. Politecnico di Milano, Milan.
 
+Starting from a NACA0012 finding the derivaties with finite differences
+"""
 
 fname = "n0012.csv" #airfoil coordinates to load
 AoA = 2.5
@@ -25,7 +30,7 @@ rbfd = RBFDesign(rbfg, ap0)
 sprob = StabilizedProblem(VMS(2))
 
 physicalp = PhysicalParameters(Re=1000, u_in=[1.0,0.0])
-timep = TimeParameters(dt=0.05, tF=10.0, time_window=(0.5, 1.0))
+timep = TimeParameters(dt=0.05, tF=1.0, time_window=(0.8, 1.0))
 
 meshinfo = AirfoilMesh(AoA= AoA, meshref=2)
 meshp = MeshParameters((1,1), 2, meshinfo)

@@ -14,20 +14,23 @@ function solve_adjoint_optimization(adjp::AdjointProblem)
     f, ∇f! = make_f_and_∇f(adjp, Ndes)
 
 
-   
+    opt_options = Optim.Options(iterations = solver.max_iter)  # change  to your desired limit
+
     ls = LineSearches.Static()
     # L-BFGS optimizer with line search control
-    result = optimize(f, ∇f!,lb,ub, w_init, Fminbox(LBFGS(alphaguess=0.5,linesearch = ls)))
+    result = optimize(f, ∇f!,lb,ub, w_init, Fminbox(LBFGS(alphaguess=solver.αg , linesearch = ls)),opt_options)
     
     return true
 end
 
 
+
+#Boundary conditions on design parameters
 function bounds_w(adesign::RBFDesign, Ndes::Int64)
     Nhalf = Int(Ndes ÷ 2)
     Δy = 0.005
-    lb = [-Δy .* ones(Nhalf);-0.25.* ones(Nhalf)]
-    ub =[0.25 .* ones(Nhalf); Δy.* ones(Nhalf)]
+    lb = [-Δy .* ones(Nhalf);-0.5.* ones(Nhalf)]
+    ub =[0.5 .* ones(Nhalf); Δy.* ones(Nhalf)]
     lb[1] = Δy
     ub[Nhalf+1] = -Δy
 
@@ -98,15 +101,12 @@ function eval_f(w::Vector, cache::SharedCache)
     @unpack  iter, uh, ph, adjp, am= cache
     @unpack J,adesign, vbcase, timesol,solver = adjp
 
-    println("w = $w")
-
     meshinfo = vbcase.meshp.meshinfo
     physicalp = vbcase.simulationp.physicalp
 
-
     iter = iter+1
-
     @info "Iteration $iter started"
+    println("Design parameters = $w")
 
     #create the new airfoil model from the weights w
     adesign = create_AirfoilDesign(adesign,w)
@@ -151,27 +151,21 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
 
     uhadj,phadj = solve_inc_adj(am, airfoil_case, adj_bc, "inc-adj-steady-$iter", :steady, uh, ph)
 
-
     Ndes = length(w) #number of design parameters
-    δ = solver.δ #0.01
+    δ = solver.δ #0.0001
     shift = CSTweights(Int(Ndes/2), δ)
-    shiftv =   vcat(shift)
+    shiftv =   vcat(shift) #[δ,δ,δ,δ,δ...., -δ,-δ,-δ,-δ,.....]
 
     
     Jtot = iterate_perturbation(shiftv,adesign,am, airfoil_case,uh,ph,uhadj,phadj )
     @info "Gradient: $Jtot"
     
 
-    jldsave("results/J$(iter).jld2"; Jtot)
-
-    grad[:] = Jtot 
+    grad[:] = Jtot #update the gradients
 
     
     #update values iteration
-
-
-    adj_sol = AdjSolution(iter, cache.fval, cache.CDCL, w, grad, am, adj_bc, cache.Cp, uh, ph )
-
+    adj_sol = AdjSolution(iter, cache.fval, cache.CDCL, w, grad, am, adj_bc, cache.Cp, uh, ph, uhadj, phadj  )
 
     jldsave("results/ADJ_SOL$(iter).jld2"; adj_sol)
     @info "Iteration $iter completed"
@@ -180,7 +174,7 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
 end
 
 
-function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel,airfoil_case::Airfoil, uh,ph,uhadj,phadj  )
+function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel, airfoil_case::Airfoil, uh,ph,uhadj,phadj  )
     Ndes = length(shift)
 
     meshinfo = airfoil_case.meshp.meshinfo
@@ -190,7 +184,6 @@ function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am
         @info "Perturbation Domain $i"
 
         adesign_tmp = perturb_DesignParameter(adesign, i, ss)
-
         modelname_tmp =create_msh(meshinfo,adesign_tmp, physicalp,"MeshPerturb"; iter = i+100)
         model_tmp = GmshDiscreteModel(modelname_tmp)
         am_tmp =  AirfoilModel(model_tmp, airfoil_case; am=am)

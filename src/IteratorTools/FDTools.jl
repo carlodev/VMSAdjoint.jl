@@ -1,6 +1,11 @@
-
+"""
+    finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem)
+Iterator for Finite Difference Analysis
+"""
 function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem)
     @unpack timesol, adesign, J, vbcase, solver= adjoint_airfoil_problem
+    @sunpack order = vbcase
+    
     fddir = "FD"
     mkpath(fddir)
 
@@ -28,8 +33,8 @@ function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem)
     fval0, CLCD0 = obj_fun(am, airfoil_case, uh0,ph0, J)
     fval_fd, CLCD_fd = iterate_fd(shiftv,adesign,am,airfoil_case,timesol, J )
 
-    fval_grad = (fval_fd - fval0)./shiftv
-    CLCD_grad=     map(CLCDi->CLCDi .- CLCD0, CLCD_fd) ./shiftv
+    fval_grad = (fval_fd .- fval0)./shiftv
+    CLCD_grad=     map(CLCDi-> CLCDi .- CLCD0, CLCD_fd) ./shiftv
     
     sol_fd = Dict(:CLCD_grad=>CLCD_grad, :fval_grad=>fval_grad )
     jldsave( joinpath(fddir, "FD_SOL.jld2"); sol_fd)
@@ -67,7 +72,7 @@ function iterate_fd(shift::Vector{Float64},adesign::AirfoilDesign,am::AirfoilMod
         
         uh_tmp,ph_tmp = solve_inc_primal(am_tmp, airfoil_case, filename, timesol; uh0=nothing,ph0=nothing)    
 
-        fval_fd[i], CLCD_fd[i] = obj_fun(am, airfoil_case, uh_tmp,ph_tmp, J)
+        fval_fd[i], CLCD_fd[i] = obj_fun(am_tmp, airfoil_case, uh_tmp,ph_tmp, J)
 
     end
     

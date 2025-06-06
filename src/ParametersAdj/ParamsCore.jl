@@ -27,7 +27,7 @@ end
 @with_kw struct AdjSolver
     max_iter::Int64 = 10 #maximum number of adjoint iterations
     tol::Float64 = 2.5e-2 #tolerance convergence
-    opt_alg::Symbol = :LD_LBFGS #OPTIMIZATION algorithm
+    αg::Float64 = 0.6 #alphaguess, reduce if the geometry is chaning too fast
     δ::Float64=0.01 #Perturbation of the design parameters for finite differences
     
 end
@@ -77,6 +77,8 @@ struct AdjSolution
     pressure_distribution::AirfoilScalar
     uh
     ph
+    uhadj
+    phadj
 end
 
 
