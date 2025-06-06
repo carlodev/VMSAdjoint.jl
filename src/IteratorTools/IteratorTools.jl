@@ -28,7 +28,6 @@ export compute_sensitivity
 include("Sensitivity.jl")
 
 export solve_adjoint_optimization
-# include("OptimizationLoop.jl")
 include("OptLoop.jl")
 
 export finite_difference_analysis

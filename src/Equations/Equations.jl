@@ -11,9 +11,6 @@ export equations_primal
 export equations_adjoint
 
 
-# export eq_direct_differentiation_steady
-# export eq_direct_differentiation_unsteady
-
 include("PrimalEquations.jl")
 include("AdjointEquations.jl")
 # include("DirectDifferentiation.jl")

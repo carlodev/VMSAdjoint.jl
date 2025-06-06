@@ -1,6 +1,17 @@
-
-function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem)
+"""
+    finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem)
+Iterator for Finite Difference Analysis
+"""
+function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem; idxs::Vector{Int64}=[])
     @unpack timesol, adesign, J, vbcase, solver= adjoint_airfoil_problem
+    @sunpack order = vbcase
+    
+    if isempty(idxs)
+        idxs = collect(1:1:Ndes)
+    else
+        @assert maximum(idxs) <= Ndes "The IDX of Finite Difference has to be in the range of tha maximum number of design parameters; maximum(idxs) = $(maximum(idxs)), Number of design parameters: $Ndes"
+    end
+
     fddir = "FD"
     mkpath(fddir)
 
@@ -24,14 +35,16 @@ function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem)
 
     filename = joinpath(fddir, "FD_0")
 
+   
+
     uh0,ph0 = solve_inc_primal(am, airfoil_case, filename, timesol)    
     fval0, CLCD0 = obj_fun(am, airfoil_case, uh0,ph0, J)
-    fval_fd, CLCD_fd = iterate_fd(shiftv,adesign,am,airfoil_case,timesol, J )
+    fval_fd, CLCD_fd = iterate_fd(shiftv,idxs, adesign,am,airfoil_case,timesol, J )
 
-    fval_grad = (fval_fd - fval0)./shiftv
-    CLCD_grad=     map(CLCDi->CLCDi .- CLCD0, CLCD_fd) ./shiftv
+    fval_grad = (fval_fd .- fval0)./shiftv
+    CLCD_grad= map(CLCDi-> CLCDi .- CLCD0, CLCD_fd) ./shiftv
     
-    sol_fd = Dict(:CLCD_grad=>CLCD_grad, :fval_grad=>fval_grad )
+    sol_fd = Dict(:CLCD_grad=>CLCD_grad, :fval_grad=>fval_grad, :idxs=>idxs)
     jldsave( joinpath(fddir, "FD_SOL.jld2"); sol_fd)
 
 
@@ -39,21 +52,25 @@ function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem)
 
 end
 
-function iterate_fd(shift::Vector{Float64},adesign::AirfoilDesign,am::AirfoilModel,airfoil_case::Airfoil,timesol::Symbol, J::Function  )
+function iterate_fd(shift::Vector{Float64}, idxs::Vector{Int64}, adesign::AirfoilDesign,am::AirfoilModel,airfoil_case::Airfoil,timesol::Symbol, J::Function  )
     fddir = "FD"
     mkpath(fddir)
 
-    Ndes = length(shift)
+    # Ndes = length(shift)
+    Nidxs = length(idxs)
 
     meshinfo = airfoil_case.meshp.meshinfo
     physicalp =airfoil_case.simulationp.physicalp
 
 
-    fval_fd = zeros(Ndes)
-    CLCD_fd = [zeros(length(2)) for i= 1:Ndes]
+    fval_fd = zeros(Nidxs)
+    CLCD_fd = [zeros(length(2)) for i= 1:Nidxs]
 
+    
+    for i in idxs
+        
+        ss = shift[i]
 
-    for (i,ss) in enumerate(shift)
         println("Perturbation Domain $i")
 
         adesign_tmp = perturb_DesignParameter(adesign, i, ss)
@@ -67,7 +84,7 @@ function iterate_fd(shift::Vector{Float64},adesign::AirfoilDesign,am::AirfoilMod
         
         uh_tmp,ph_tmp = solve_inc_primal(am_tmp, airfoil_case, filename, timesol; uh0=nothing,ph0=nothing)    
 
-        fval_fd[i], CLCD_fd[i] = obj_fun(am, airfoil_case, uh_tmp,ph_tmp, J)
+        fval_fd[i], CLCD_fd[i] = obj_fun(am_tmp, airfoil_case, uh_tmp,ph_tmp, J)
 
     end
     

@@ -28,6 +28,10 @@ function solve_inc_primal(am::AirfoilModel, simcase::Airfoil, ::Val{:unsteady}; 
 end
 
 
+function rotation(n::VectorValue{2,Float64})
+    n1, n2 = [n...] ./ norm(n)
+    VectorValue(-n2, n1)
+end
 
 function create_primal_spaces(model, simcase::Airfoil)
     @sunpack tagname, order, D = simcase
@@ -54,6 +58,7 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     u_walls(x,t) = VectorValue(zeros(D)...) 
     u_walls(t::Real) = x -> u_walls(x,t)
 
+
     p0(x,t) = 0.0
     p0(t::Real) = x -> p0(x,t)
 
@@ -63,7 +68,10 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     Y = TransientMultiFieldFESpace([V, Q])
     X = TransientMultiFieldFESpace([U, P])
 
-    degree = order * 4
+    setup_shape_opt_spaces!(D, order, model, am)
+
+    
+    degree = order * 2
     Ω = Triangulation(model)
     dΩ = Measure(Ω, degree)
     updatekey(am.params,:Ω,Ω)
@@ -86,13 +94,13 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     updatekey(am.params, :uh,uh0)
     m, res, rhs =  equations_primal( simcase, am.params,:unsteady)
 
-    op = TransientAffineFEOperator(m, res, rhs, X, Y)
+    op = TransientLinearFEOperator((res, m), rhs, X, Y)
 
     ls = LUSolver()
 
     ode_solver = ThetaMethod(ls,dt,θ)
 
-    sol = Gridap.solve(ode_solver, op, xh0, t0, tF)
+    sol = Gridap.solve(ode_solver, op, t0, tF, xh0)
 
     UH = [copy(uh0.free_values)]
     PH = [copy(ph0.free_values)]
@@ -102,19 +110,18 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     mkpath(res_path)
 
     createpvd(filename) do pvd
-        for (idx,(xhtn, t)) in enumerate(sol)
+        pvd[0] = createvtk(Ω, nsubcells = order, joinpath(res_path, "$(filename)_0" * ".vtu"), cellfields=["uh" => uh0, "ph" => ph0])
+        for (idx,(t, xhtn)) in enumerate(sol)
             uh = xhtn[1]
             ph = xhtn[2]
             push!(UH, copy(uh.free_values))
             push!(PH, copy(ph.free_values))
             println("Primal solved at time step $t")
-
+                 
             copyto!(am.params[:uh].free_values,uh.free_values)
-
-            jldsave("UHPH.jld2"; UH,PH)
-            
-            if mod(idx,1)==0
-                pvd[t] = createvtk(Ω, joinpath(res_path, "$(filename)_$t" * ".vtu"), cellfields=["uh" => uh, "ph" => ph])
+           
+            if mod(idx,20)==0
+                pvd[t] = createvtk(Ω, nsubcells = order, joinpath(res_path, "$(filename)_$t" * ".vtu"), cellfields=["uh" => uh, "ph" => ph])
             end
 
         end
@@ -128,7 +135,6 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     return uh0,ph0
 
 end
-
 
 
 function time_average_fields(UH,PH, time_window,dt::Float64, t0::Float64)
@@ -168,6 +174,8 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
 
     Y = MultiFieldFESpace([V, Q])
     X = MultiFieldFESpace([U, P])
+    
+    setup_shape_opt_spaces!(D, order, model, am)
 
     degree = order*2
     Ω = Triangulation(model)
@@ -175,15 +183,11 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
     updatekey(am.params,:Ω,Ω)
     updatekey(am.params,:dΩ,dΩ)
 
-    # GridapPETSc.with(args=split(petsc_options)) do
 
 
     ls = LUSolver()
-    # ls = BackslashSolver()
 
     solver = LinearFESolver(ls)
-    # solver = PETScLinearSolver()
-
 
     uh = interpolate(u0, U)
     ph = interpolate(0.0, P)
@@ -201,11 +205,10 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
         uh,ph = solve_steady_primal(uh,ph,X,Y,simcase, am.params,solver )
     end
 
-    # end #end GridapPETSc
 
 
     if !isnothing(filename)
-        writevtk(Ω, filename, nsubcells=order,  cellfields=["uh" => uh, "ph" => ph])
+        writevtk(Ω, nsubcells=order, filename,  cellfields=["uh" => uh, "ph" => ph])
     end
     
 
@@ -228,4 +231,23 @@ function solve_steady_primal(uh,ph,X,Y,simcase, params,solver )
 
     uh, ph = xh 
     return  uh, ph
+end
+
+
+function setup_shape_opt_spaces!(D::Int64, order::Int64, model, am::AirfoilModel)
+    reffe = ReferenceFE(lagrangian, VectorValue{D,Float64}, order )
+    VV0 = FESpace(model, reffe; conformity=:H1)
+
+    Γ = BoundaryTriangulation(am.model; tags="airfoil")
+    dΓ = Measure(Γ, order*2)
+    nΓ = -get_normal_vector(Γ) #beacuse they point inward 
+    tΓ = rotation ∘ nΓ
+
+    updatekey(am.params,:reffe,reffe)
+    updatekey(am.params,:VV0,VV0)
+    updatekey(am.params,:Γ,Γ)
+    updatekey(am.params,:dΓ,dΓ)
+    updatekey(am.params,:nΓ,nΓ)
+    updatekey(am.params,:tΓ,tΓ)
+    
 end
