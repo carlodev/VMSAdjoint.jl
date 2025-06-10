@@ -6,11 +6,9 @@ function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem; idx
     @unpack timesol, adesign, J, vbcase, solver= adjoint_airfoil_problem
     @sunpack order = vbcase
     
-    if isempty(idxs)
-        idxs = collect(1:1:Ndes)
-    else
-        @assert maximum(idxs) <= Ndes "The IDX of Finite Difference has to be in the range of tha maximum number of design parameters; maximum(idxs) = $(maximum(idxs)), Number of design parameters: $Ndes"
-    end
+
+
+
 
     fddir = "FD"
     mkpath(fddir)
@@ -22,6 +20,14 @@ function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem; idx
     physicalp =airfoil_case.simulationp.physicalp
 
     Ndes = length(w) #number of design parameters
+
+    if isempty(idxs)
+        idxs = collect(1:1:Ndes)
+    else
+        @assert maximum(idxs) <= Ndes "The IDX of Finite Difference has to be in the range of tha maximum number of design parameters; maximum(idxs) = $(maximum(idxs)), Number of design parameters: $Ndes"
+    end
+
+    
     δ = solver.δ #0.001
     shift = CSTweights(Int(Ndes/2), δ)
     shiftv =   vcat(shift)
