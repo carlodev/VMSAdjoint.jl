@@ -2,6 +2,7 @@ name = "VMSAdjoint"
 uuid = "ba4988d2-6921-40e1-be8e-a232a9d549c8"
 authors = ["carlo"]
 version = "1.0.0-DEV"
+license = "GPL-3.0"
 
 [deps]
 AirfoilTools = "ff2b20dc-dff8-4614-a827-c2b59f7d9fcf"
