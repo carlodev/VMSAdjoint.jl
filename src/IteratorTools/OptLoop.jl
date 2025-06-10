@@ -167,7 +167,8 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
     #update values iteration
     adj_sol = AdjSolution(iter, cache.fval, cache.CDCL, w, grad, am, adj_bc, cache.Cp, uh, ph, uhadj, phadj  )
 
-    jldsave("results/ADJ_SOL$(iter).jld2"; adj_sol)
+    mkpath("results")
+    jldsave(joinpath("results","ADJ_SOL$(iter).jld2"); adj_sol)
     @info "Iteration $iter completed"
 
 
