@@ -46,6 +46,7 @@ end
 function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename, uh00, ph00)
     
     @sunpack D,order,t_endramp,t0,tF,θ,dt,u_in,time_window = simcase
+    @sunpack M = simcase #here now M is the step to save .vtu files
     @unpack model = am
 
     V,Q = create_primal_spaces(model,simcase)
@@ -120,7 +121,7 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
                  
             copyto!(am.params[:uh].free_values,uh.free_values)
            
-            if mod(idx,20)==0
+            if mod(idx,M)==0
                 pvd[t] = createvtk(Ω, nsubcells = order, joinpath(res_path, "$(filename)_$t" * ".vtu"), cellfields=["uh" => uh, "ph" => ph])
             end
 
@@ -159,8 +160,11 @@ end
 
 function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, uh00,ph00)
     @sunpack D,order,t_endramp,t0,tf,θ,dt,u_in,petsc_options = simcase
+    @sunpack matrix_freq_update = simcase #number of iterations in steady
     @unpack model = am
     V,Q = create_primal_spaces(model,simcase)
+
+    n_inner_iter = matrix_freq_update
 
     u0 = VectorValue(u_in...)
     u_walls = VectorValue(zeros(D)...) 
@@ -200,7 +204,7 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
          ph.free_values .=  ph00.free_values
      end
 
-    for i = 1:4
+    for i = 1:n_inner_iter
         println(i)
         uh,ph = solve_steady_primal(uh,ph,X,Y,simcase, am.params,solver )
     end
