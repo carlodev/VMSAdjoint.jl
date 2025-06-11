@@ -36,7 +36,7 @@ end
 function create_primal_spaces(model, simcase::Airfoil)
     @sunpack tagname, order, D = simcase
     reffeᵤ = ReferenceFE(lagrangian, VectorValue{D,Float64}, order )
-    V = TestFESpace(model, reffeᵤ, conformity=:H1, dirichlet_tags=["inlet", "limits", "airfoil", "outlet"],  dirichlet_masks=[(true,true), (false,true),(true,true), (false, true) ])
+    V = TestFESpace(model, reffeᵤ, conformity=:H1, dirichlet_tags=["inlet", "limits", "airfoil"],  dirichlet_masks=[(true,true), (false,true),(true,true) ])
     reffeₚ = ReferenceFE(lagrangian, Float64, order)
     Q = TestFESpace(model, reffeₚ, conformity=:H1, dirichlet_tags=["outlet"])
 
@@ -63,7 +63,7 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     p0(x,t) = 0.0
     p0(t::Real) = x -> p0(x,t)
 
-    U = TransientTrialFESpace(V, [u0, u0, u_walls, u0])
+    U = TransientTrialFESpace(V, [u0, u0, u_walls])
     P = TransientTrialFESpace(Q, p0)
 
     Y = TransientMultiFieldFESpace([V, Q])
@@ -170,7 +170,7 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
     u_walls = VectorValue(zeros(D)...) 
     p0 = 0.0
 
-    U = TrialFESpace(V, [u0, u0, u_walls, u0])
+    U = TrialFESpace(V, [u0, u0, u_walls])
     P = TrialFESpace(Q, [p0])
     
     updatekey(am.params,:U,U)
