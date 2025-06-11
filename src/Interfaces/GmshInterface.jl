@@ -52,7 +52,7 @@ end
 function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,  pp::PhysicalParameters ; iter::Int64= 0)
     @unpack AoA, meshref, folder, H, Lback = am
     @unpack ap = airfoil_design
-    return create_msh(ap;H=8.0, Lback =8.0, AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
+    return create_msh(ap;H=H, Lback =Lback, AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
 end
 
 
@@ -60,7 +60,7 @@ end
 function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,  pp::PhysicalParameters, folder::String; iter::Int64= 0 , )
     @unpack AoA, meshref,H, Lback = am
     @unpack ap = airfoil_design
-    return create_msh(ap; H=8.0, Lback =8.0, AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
+    return create_msh(ap; H=H, Lback =Lback, AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
 end
 
 """
