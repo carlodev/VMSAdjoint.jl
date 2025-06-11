@@ -17,8 +17,9 @@ function solve_adjoint_optimization(adjp::AdjointProblem)
     opt_options = Optim.Options(iterations = solver.max_iter)  # change  to your desired limit
 
     ls = LineSearches.Static()
+    step_options = LineSearches.InitialStatic(alpha=solver.αg, scaled=solver.scaled)
     # L-BFGS optimizer with line search control
-    result = optimize(f, ∇f!,lb,ub, w_init, Fminbox(LBFGS(alphaguess=solver.αg , linesearch = ls)),opt_options)
+    result = optimize(f, ∇f!,lb,ub, w_init, Fminbox(LBFGS(alphaguess=step_options, linesearch = ls)),opt_options)
     
     return true
 end

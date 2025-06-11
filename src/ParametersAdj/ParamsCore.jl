@@ -63,6 +63,7 @@ Settings for the adjoint solver
     αg::Float64 = 2.0 #alphaguess, reduce if the geometry is chaning too fast
     δ::Float64=0.0001 #Perturbation of the design parameters for finite differences
     bounds::DesignBounds = DesignBounds()
+    scaled::Bool = false
 end
 
 
