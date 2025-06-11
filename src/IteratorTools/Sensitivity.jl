@@ -8,7 +8,7 @@ am0:: Airfoil model of pertubed geometry
 δ:: is the signed perturbation
 """
 
-function compute_sensitivity(am0::AirfoilModel,am1::AirfoilModel,  δ::Float64, simcase::Airfoil,  uh,ph,uhadj,phadj)
+function compute_sensitivity(am0::AirfoilModel,am1::AirfoilModel,  δ::Float64, simcase::Airfoil,  uh,uhadj, Jcorr::Float64)
 
     @sunpack D,order,u_in, ν = simcase
     @unpack VV0, dΩ, reffe = am0.params
@@ -26,7 +26,7 @@ function compute_sensitivity(am0::AirfoilModel,am1::AirfoilModel,  δ::Float64, 
     v_field = FEFunction(VV0,vi)
 
     #-2 coming from the derivative of dCL/dβ or dCD/dβ; to be adjusted if more complex derivations
-    J_sens = -2 .*    sum(-ν* ∫( ((∇(uh) ⋅ tΓ) ⋅ nΓ) * ((∇(uhadj) ⋅ tΓ) ⋅ nΓ) ⋅ (v_field ⋅nΓ) )dΓ)
+    J_sens = -Jcorr .*    sum(-ν* ∫( ((∇(uh) ⋅ tΓ) ⋅ nΓ) * ((∇(uhadj) ⋅ tΓ) ⋅ nΓ) ⋅ (v_field ⋅nΓ) )dΓ)
 
     return J_sens
     

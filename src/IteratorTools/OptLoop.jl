@@ -8,7 +8,7 @@ function solve_adjoint_optimization(adjp::AdjointProblem)
 
     #create bounds
     Ndes = length(w_init)
-    lb,ub = bounds_w(adjp.adesign,  Ndes)
+    lb,ub = bounds_w(adjp.adesign, Ndes, solver.bounds)
 
     @info "Number of Design parameters: $Ndes"
     f, ∇f! = make_f_and_∇f(adjp, Ndes)
@@ -26,26 +26,25 @@ end
 
 
 #Boundary conditions on design parameters
-function bounds_w(adesign::RBFDesign, Ndes::Int64)
+function bounds_w(adesign::RBFDesign, Ndes::Int64,bounds::DesignBounds )
+    @unpack upper, lower, Δy = bounds
     Nhalf = Int(Ndes ÷ 2)
-    Δy = 0.005
-    lb = [-Δy .* ones(Nhalf);-0.5.* ones(Nhalf)]
-    ub =[0.5 .* ones(Nhalf); Δy.* ones(Nhalf)]
+    lb = [-Δy .* ones(Nhalf);lower.* ones(Nhalf)]
+    ub =[upper .* ones(Nhalf); Δy.* ones(Nhalf)]
     lb[1] = Δy
     ub[Nhalf+1] = -Δy
-
-    # lb = -0.25 .* ones(Ndes)
-    # ub = 0.25 .* ones(Ndes)
-
     
-    
+    @info "Bounds settings"
+    println("lower:$lb")
+    println("upper:$ub")
+ 
     [@assert ub1>lb1 for (ub1,lb1) in zip(ub,lb)]
 
     return lb,ub
 end
 
 
-function bounds_w(adesign::AirfoilCSTDesign,  Ndes::Int64)
+function bounds_w(adesign::AirfoilCSTDesign,  Ndes::Int64, bounds::DesignBounds)
     Nhalf = Int(Ndes ÷ 2)
     nose = 0.08
     lb = [nose; nose; nose; -0.15.* ones(Nhalf-3); -1.5 .* ones(Nhalf)]
@@ -99,7 +98,7 @@ end
 function eval_f(w::Vector, cache::SharedCache)
 
     @unpack  iter, uh, ph, adjp, am= cache
-    @unpack J,adesign, vbcase, timesol,solver = adjp
+    @unpack JJfact, adesign, vbcase, timesol,solver = adjp
 
     meshinfo = vbcase.meshp.meshinfo
     physicalp = vbcase.simulationp.physicalp
@@ -129,9 +128,10 @@ function eval_f(w::Vector, cache::SharedCache)
     #### extract results from primal solution: Cp (and Cf)
     PressureCoefficient = get_aerodynamic_features(am,uh,ph)
 
+    J,_ = JJfact
 
+    
     fval, CDCL = obj_fun(am, vbcase, uh,ph, J)
- 
     #### Adjoint Boundary Conditions
     #use the CLCD value to set the Boundary Condition
     adj_bc = -dJobj_fun(J, CDCL)
@@ -142,9 +142,11 @@ end
 
 
 function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
-    @unpack  iter, uh, ph, adjp, am, adj_bc= cache
-    @unpack J,adesign, vbcase, timesol,solver = adjp
-
+    @unpack  iter, uh, ph, adjp, am, adj_bc, CDCL= cache
+    @unpack JJfact,adesign, vbcase, timesol,solver = adjp
+    
+    _,Jfact = JJfact
+    
     airfoil_case= vbcase
     adesign = create_AirfoilDesign(adesign,w)
 
@@ -156,14 +158,14 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
     shift = CSTweights(Int(Ndes/2), δ)
     shiftv =   vcat(shift) #[δ,δ,δ,δ,δ...., -δ,-δ,-δ,-δ,.....]
 
-    
-    Jtot = iterate_perturbation(shiftv,adesign,am, airfoil_case,uh,ph,uhadj,phadj )
+    Jcorr = Jfact(CDCL) ## correction factor
+
+    Jtot = iterate_perturbation(shiftv,adesign,am, airfoil_case,uh,uhadj, Jcorr )
     @info "Gradient: $Jtot"
     
 
     grad[:] = Jtot #update the gradients
 
-    
     #update values iteration
     adj_sol = AdjSolution(iter, cache.fval, cache.CDCL, w, grad, am, adj_bc, cache.Cp, uh, ph, uhadj, phadj  )
 
@@ -175,7 +177,7 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
 end
 
 
-function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel, airfoil_case::Airfoil, uh,ph,uhadj,phadj  )
+function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel, airfoil_case::Airfoil, uh,uhadj, Jcorr::Float64 )
     Ndes = length(shift)
 
     meshinfo = airfoil_case.meshp.meshinfo
@@ -189,7 +191,7 @@ function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am
         model_tmp = GmshDiscreteModel(modelname_tmp)
         am_tmp =  AirfoilModel(model_tmp, airfoil_case; am=am)
 
-        Ji[i] = compute_sensitivity(am, am_tmp,ss, airfoil_case, uh,ph,uhadj,phadj) 
+        Ji[i] = compute_sensitivity(am, am_tmp,ss, airfoil_case, uh,uhadj,Jcorr) 
 
     end
     

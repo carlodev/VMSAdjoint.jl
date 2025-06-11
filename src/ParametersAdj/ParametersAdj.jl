@@ -10,6 +10,7 @@ export AirfoilNormals
 export AirfoilScalar
 export AirfoilModel
 export AirfoilMesh
+export DesignBounds
 export AdjSolver
 export AdjointProblem
 export AdjSolution

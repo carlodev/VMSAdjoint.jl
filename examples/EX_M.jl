@@ -38,7 +38,7 @@ meshinfo = AirfoilMesh(AoA= AoA, meshref=0)
 meshp = MeshParameters((1,1), 2, meshinfo)
 exportp = ExportParameters(printinitial=true,printmodel=true,name_tags=["airfoil"], fieldexport=[["uh","ph","friction"]])
 
-solverp = SolverParameters(θ=1.0) #keep θ=1.0 for stability
+solverp = SolverParameters(θ=1.0,  M=1, matrix_freq_update=4) #keep θ=1.0 for stability
 
 simparams = SimulationParameters(timep,physicalp,solverp,exportp)
 
@@ -50,18 +50,21 @@ airfoil_case = Airfoil(meshp,simparams,sprob)
 #The boundary conditions are defined as -dJ/dCDCL
 function J(CDCL; CLtarget=0.75)
     CD,CL=CDCL
-    return CD #0.5 * (CL - CLtarget)^2
+    return CD  #0.5 * (CL - CLtarget)^2
 end  
 
-#Another example of objective function is: 
-# function J(CDCL; CLtarget=0.75)
-#     CD,CL=CDCL
-#     return 0.5 * (CL - CLtarget)^2
-# end  
+function Jfact(CDCL; CLtarget=0.75)
+    CD,CL=CDCL
+    return 2.0 #as Float64  
+end  
+
 
 #Perturbation of your design parameters. The one on the pressure side are pertubed by -δ; so the deformation is always outward
 adj_solver = AdjSolver(δ=0.0001)
 
 #here you can choose :steady or :unsteady for the resolution of the primal flow. The unsteady solution is always initialized from a steady one.
-adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:unsteady, J)
+adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:unsteady, (J,Jfact) )
+
+
+
 solve_adjoint_optimization(adjoint_airfoil_problem)

@@ -23,14 +23,21 @@ function AirfoilScalar(am::AirfoilModel)
     return AirfoilScalar(zeros(nu), zeros(nl))
 end
 
+@with_kw struct DesignBounds
+    upper::Float64=0.5
+    lower::Float64=-0.5
+    Δy::Float64=0.005
+end
+
 
 @with_kw struct AdjSolver
     max_iter::Int64 = 10 #maximum number of adjoint iterations
     tol::Float64 = 2.5e-2 #tolerance convergence
-    αg::Float64 = 0.6 #alphaguess, reduce if the geometry is chaning too fast
-    δ::Float64=0.01 #Perturbation of the design parameters for finite differences
-    
+    αg::Float64 = 2.0 #alphaguess, reduce if the geometry is chaning too fast
+    δ::Float64=0.0001 #Perturbation of the design parameters for finite differences
+    bounds::DesignBounds = DesignBounds()
 end
+
 
 @with_kw struct AirfoilMesh <:MeshInfo
     AoA::Real #Angle of Attack - degrees
@@ -43,18 +50,18 @@ struct AdjointProblem
     vbcase::VelocityBoundaryCase
     solver::AdjSolver
     timesol::Symbol
-    J::Function #objective function
-    function AdjointProblem(   adesign::AirfoilDesign,vbcase::VelocityBoundaryCase,solver::AdjSolver,timesol::Symbol,J::Function)
+    JJfact::Tuple #objective function
+    function AdjointProblem(   adesign::AirfoilDesign,vbcase::VelocityBoundaryCase,solver::AdjSolver,timesol::Symbol,JJfact::Tuple)
         if timesol ∉ (:steady, :unsteady)
             throw(ArgumentError("Invalid timesol: $timesol. Must be :steady, :unsteady"))
         end
-        new(adesign, vbcase,solver,timesol,J)
+        new(adesign, vbcase,solver,timesol,JJfact)
     end
 end
 
-function AdjointProblem(    adesign::AirfoilDesign,vbcase::VelocityBoundaryCase,timesol::Symbol, J::Function)
+function AdjointProblem(    adesign::AirfoilDesign,vbcase::VelocityBoundaryCase,timesol::Symbol, JJfact::Tuple)
     solver=AdjSolver()
-return     AdjointProblem(    adesign,vbcase,solver,timesol,J)
+return     AdjointProblem(    adesign,vbcase,solver,timesol,JJfact)
 end
 
 """
