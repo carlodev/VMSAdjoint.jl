@@ -50,17 +50,17 @@ function find_origin_idx(leading_edge_points::Vector)
 end
 
 function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,  pp::PhysicalParameters ; iter::Int64= 0)
-    @unpack AoA, meshref, folder = am
+    @unpack AoA, meshref, folder, H, Lback = am
     @unpack ap = airfoil_design
-    return create_msh(ap; AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
+    return create_msh(ap;H=8.0, Lback =8.0, AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
 end
 
 
 
 function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,  pp::PhysicalParameters, folder::String; iter::Int64= 0 , )
-    @unpack AoA, meshref = am
+    @unpack AoA, meshref,H, Lback = am
     @unpack ap = airfoil_design
-    return create_msh(ap; AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
+    return create_msh(ap; H=8.0, Lback =8.0, AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
 end
 
 """
@@ -68,15 +68,15 @@ end
 
 From a set of `airfoil_points` it creates the .msh file. Incresing `mesh_ref` is increasing the mesh density.
 """
-function create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0, mesh_ref=1.0, folder="MeshFiles")
+function create_msh(airfoil_points::AirfoilPoints; H=8.0, Lback =8.0, AoA=0.0, iter = 0, chord= 1.0, mesh_ref=1.0, folder="MeshFiles")
 
 
     gmsh.initialize()
     
     gmsh.model.add("Model1")
-    Lback = 8*chord
-    H= 8*chord
-    offset =2.35
+    Lback = Lback*chord
+    H= H*chord
+    offset = 2.35
     slant = 2.0
     
     gmsh.model.geo.addPoint(Lback, -H, 0)

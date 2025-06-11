@@ -71,6 +71,8 @@ end
     AoA::Real #Angle of Attack - degrees
     meshref::Int64=1 #increase it, and it wil increase the resolution. Put = 0 and it will be very coarse, useful to debug
     folder::String="MeshFiles"
+    H::Real = 8
+    Lback::Real = 8
 end
 
 struct AdjointProblem
