@@ -1,3 +1,8 @@
+"""
+Interface with SegregatedVMSSolver
+"""
+
+
 
 function equations_primal( simcase::Airfoil,params::Dict{Symbol,Any},time_dep::Symbol)
     equations_primal( simcase,params,Val(time_dep))

@@ -11,3 +11,5 @@ Results_primal/
 *.pvd
 *.sh
 *.out
+*.pdf
+*.svg

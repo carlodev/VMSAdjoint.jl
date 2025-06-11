@@ -1,5 +1,9 @@
 module ParametersAdj
 
+"""
+    In this module are defined the main struct used in the package. It is extending the basic ones from SegregatedVMSSolver.ParametersDef and AirfoilTools
+"""
+
 using SegregatedVMSSolver
 using Parameters
 using Gridap

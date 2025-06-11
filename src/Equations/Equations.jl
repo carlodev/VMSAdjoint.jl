@@ -13,6 +13,5 @@ export equations_adjoint
 
 include("PrimalEquations.jl")
 include("AdjointEquations.jl")
-# include("DirectDifferentiation.jl")
 
 end

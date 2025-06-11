@@ -1,9 +1,21 @@
 
+"""
+    AirfoilNormals(nu,nl)
+
+upper and lower sides normals
+"""
 struct AirfoilNormals
     nu::Vector{Vector{Float64}}
     nl::Vector{Vector{Float64}}
 end
 
+"""
+    AirfoilModel
+
+ap:: useful to plot them, and used to create the model
+model:: is a Gridap object
+params:: contains info on the nodes of the model, distinguishing from points on the top and bottom side
+"""
 struct AirfoilModel
     ap::AirfoilPoints
     model::Gridap.Geometry.UnstructuredDiscreteModel
@@ -11,6 +23,11 @@ struct AirfoilModel
     params::Dict{Symbol,Any}
 end
 
+"""
+    AirfoilScalar
+
+General structure for a scalar value on the surface of the airfoil (Cp or Cf)
+"""
 struct AirfoilScalar
     uval::Vector{Float64}
     lval::Vector{Float64}
@@ -23,13 +40,23 @@ function AirfoilScalar(am::AirfoilModel)
     return AirfoilScalar(zeros(nu), zeros(nl))
 end
 
+"""
+    DesignBounds
+
+Contains info on the boundary conditions for the design variables;
+Check bounds_w to see how they are used
+"""
 @with_kw struct DesignBounds
     upper::Float64=0.5
     lower::Float64=-0.5
     Δy::Float64=0.005
 end
 
+"""
+    AdjSolver
 
+Settings for the adjoint solver
+"""
 @with_kw struct AdjSolver
     max_iter::Int64 = 10 #maximum number of adjoint iterations
     tol::Float64 = 2.5e-2 #tolerance convergence
@@ -41,7 +68,7 @@ end
 
 @with_kw struct AirfoilMesh <:MeshInfo
     AoA::Real #Angle of Attack - degrees
-    meshref::Int64=1
+    meshref::Int64=1 #increase it, and it wil increase the resolution. Put = 0 and it will be very coarse, useful to debug
     folder::String="MeshFiles"
 end
 
@@ -50,7 +77,7 @@ struct AdjointProblem
     vbcase::VelocityBoundaryCase
     solver::AdjSolver
     timesol::Symbol
-    JJfact::Tuple #objective function
+    JJfact::Tuple #(objective function, adjoint correction factor from the TLF, usually = 2 if J is CL or CD optimization)
     function AdjointProblem(   adesign::AirfoilDesign,vbcase::VelocityBoundaryCase,solver::AdjSolver,timesol::Symbol,JJfact::Tuple)
         if timesol ∉ (:steady, :unsteady)
             throw(ArgumentError("Invalid timesol: $timesol. Must be :steady, :unsteady"))
@@ -87,11 +114,6 @@ struct AdjSolution
     uhadj
     phadj
 end
-
-
-
-# AdjSolution(; iter=-1, fitnessval=Inf, CDCL=[0.0,0.0],βv=Float64[],fgrad=Float64[], bc_adj=[0.0,0.0]; pressure_distribution=AirfoilScalar() )
-
 
 
 

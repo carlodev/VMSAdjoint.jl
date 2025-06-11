@@ -4,7 +4,6 @@ using Parameters
 using SegregatedVMSSolver
 
 
-# uniqueidx(v) = unique(i -> v[i], eachindex(v))
 
 function uniqueidx(v::AbstractVector)
     tol = 1e-7

@@ -32,7 +32,7 @@ sprob = StabilizedProblem(VMS(order))
 physicalp = PhysicalParameters(Re=1000, u_in=[1.0, 0.0])
 timep = TimeParameters(dt=0.05, tF=10.0, time_window=(7.5, 10.0))
 
-meshinfo = AirfoilMesh(AoA=0.0, meshref=2)
+meshinfo = AirfoilMesh(AoA=AoA, meshref=2)
 meshp = MeshParameters((1, 1), 2, meshinfo)
 exportp = ExportParameters(printinitial=true, printmodel=true, name_tags=["airfoil"], fieldexport=[["uh", "ph", "friction"]])
 
@@ -54,6 +54,7 @@ adj_sol0 = load("M/ADJ_SOL03.jld2")["adj_sol"]
 am = adj_sol0.airfoil_model
 uh,ph=adj_sol0.uh,adj_sol0.ph
 uhadj,phadj=adj_sol0.uhadj,adj_sol0.phadj
+
 
 function rotation(n::VectorValue{2,Float64})
     n1, n2 = [n...] ./ norm(n)
@@ -119,12 +120,13 @@ fd_CL = ([-0.13144596507117487,  -0.13144049689328133,-0.13142133204113804, -0.1
 fd_CD = ([ 0.1216404544975305, 0.12164022538139854, 0.121639265678663, 0.12163864470430423, 0.12163829871723085, 0.12163808109652317, 0.12163789670091155, 0.12163769948157467, 0.12163746739003616, 0.1216371925430035, 0.12163687744654388, 0.12163653066004938, 0.12163616545553438, 0.12163579709642698, 0.12163544348892595, 0.12163511230041991, 0.1216348114898485, 0.1216345602199478, 0.12163435681023815, 0.12163427508648679, 0.12163706730354933, 0.12163706106603764, 0.12163663022813836, 0.1216362323852443, 0.12163596143757201, 0.12163582081275652, 0.12163578439796892, 0.12163582287820633, 0.12163591042708378, 0.12163602986232984, 0.12163617245015604, 0.12163633750628997, 0.12163652509682873, 0.12163673532585907, 0.12163697580637903, 0.12163722805357227, 0.12163748254041373, 0.12163779866991345, 0.12163817398616644, 0.12163895833965868] .- 0.12163386560377128) ./ δv
 
 
-grad_c = -2 .* [Jbound[1:20]; - Jbound[21:end]]
-fd_c = [fd_CD[1:20]; - fd_CD[21:end]]
+grad_c = -2 .* [Jbound[1:20]; -Jbound[21:end]]
+fd_d = [fd_CD[1:20]; -fd_CD[21:end]]
+
 
 
 plot(grad_c, label = "Adjoint", linecolor=:black)
-scatter!(fd_c, label = "Finite Differences", markercolor=:black, markershape=:xcross, markersize=5.0, markerstrokewidth=2.0)
+scatter!(fd_d, label = "Finite Differences", markercolor=:black, markershape=:xcross, markersize=5.0, markerstrokewidth=2.0)
 plot!(xlabel="Design variable β", ylabel = L"C_D"* " gradient (outward deformation >0)")
 
 savefig("CD_grad.svg")
@@ -132,9 +134,16 @@ savefig("CD_grad.pdf")
 
 
 #Plot airfoil
+IIDX = 0
 modelname00 = create_msh(meshinfo, rbfd0, physicalp, "MeshPerturb"; iter=IIDX + 100)
 model00 = GmshDiscreteModel(modelname00)
 am00 = AirfoilModel(model00, airfoil_case; am=nothing)
+
+for a in rbfd0.cy.cu
+    println(a)
+end    
+
+
 
 plot(aspect_ratio = 1)
 plot!(am00.ap.xu, am00.ap.yu, linecolor=:black, label = false)
@@ -155,3 +164,28 @@ framestyle=:none  # removes plot frame
 
 savefig("Airfoil_DesignParameters.svg")
 savefig("Airfoil_DesignParameters.pdf")
+
+
+w0 = get_DesignParameters(rbfd0)
+w1 = copy(w0)
+w1[2] = w1[2] .+ 0.05
+
+rbfd1 = create_AirfoilDesign(rbfd0,w1)
+modelname1 = create_msh(meshinfo, rbfd1, physicalp, "MeshPerturb"; iter=IIDX + 100)
+model1 = GmshDiscreteModel(modelname1)
+am1 = AirfoilModel(model1, airfoil_case; am=nothing)
+
+
+Plots.default(linewidth=2)
+plot(aspect_ratio = 1, linewidth=2)
+plot!(am00.ap.xu, am00.ap.yu, linecolor=:black, label = false)
+plot!(am00.ap.xl, am00.ap.yl, linecolor=:black, label=false)
+plot!(am1.ap.xu, am1.ap.yu, linecolor=:red, label = false)
+plot!(am1.ap.xl, am1.ap.yl, linecolor=:red, label=false)
+plot!(axis=false,       # removes entire axis (ticks, spines, labels)
+grid=false,       # removes grid
+framestyle=:none  # removes plot frame
+)
+scatter!(control_points.cu, rbfd0.cy.cu, markercolor=:black, markersize=3.0, label = false)
+scatter!(control_points.cl, rbfd0.cy.cl, markercolor=:black, markersize=3.0, label=false)
+savefig("Airfoil_DesignParameters_Def.svg")

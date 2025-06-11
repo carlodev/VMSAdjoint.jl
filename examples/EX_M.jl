@@ -34,7 +34,7 @@ physicalp = PhysicalParameters(Re=1000, u_in=[1.0,0.0])
 timep = TimeParameters(dt=0.05, tF=1.0, time_window=(0.8, 1.0)) #the time-window define the time-span for time-averaging
 
 
-meshinfo = AirfoilMesh(AoA= AoA, meshref=0)
+meshinfo = AirfoilMesh(AoA= AoA, meshref=1)
 meshp = MeshParameters((1,1), 2, meshinfo)
 exportp = ExportParameters(printinitial=true,printmodel=true,name_tags=["airfoil"], fieldexport=[["uh","ph","friction"]])
 
