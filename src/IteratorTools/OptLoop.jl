@@ -84,7 +84,7 @@ function make_f_and_∇f(adjp::AdjointProblem, N::Int64)
 
         if !isequal(x, x_last)
             copy!(x_last, x)
-            cache.fval, cache.iter, cache.uh, cache.ph, cache.adj_bc, cache.am, cache.Cp = eval_f(x, cache)
+            cache.fval, cache.iter, cache.uh, cache.ph, cache.adj_bc, cache.am, cache.Cp, cache.CDCL = eval_f(x, cache)
         end
         eval_∇f!(g, x, cache)  # must recompute if f not called
         copyto!(cache.grad, g)
@@ -167,7 +167,7 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
     grad[:] = Jtot #update the gradients
 
     #update values iteration
-    adj_sol = AdjSolution(iter, cache.fval, cache.CDCL, w, grad, am, adj_bc, cache.Cp, uh, ph, uhadj, phadj  )
+    adj_sol = AdjSolution(iter, cache.fval, CDCL, w, grad, am, adj_bc, cache.Cp, uh, ph, uhadj, phadj  )
 
     mkpath("results")
     jldsave(joinpath("results","ADJ_SOL$(iter).jld2"); adj_sol)
