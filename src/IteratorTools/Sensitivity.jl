@@ -28,7 +28,11 @@ function compute_sensitivity(am0::AirfoilModel,am1::AirfoilModel,  δ::Float64, 
     #-2 coming from the derivative of dCL/dβ or dCD/dβ; to be adjusted if more complex derivations
     J_sens = -Jcorr .*    sum(-ν* ∫( ((∇(uh) ⋅ tΓ) ⋅ nΓ) * ((∇(uhadj) ⋅ tΓ) ⋅ nΓ) ⋅ (v_field ⋅nΓ) )dΓ)
 
-    return J_sens
+
+    #ThickPenalty Gradient
+    Jp = compute_∇thickness_penalty(am0,am1,  δ, thick_penalty)
+
+    return J_sens,Jp
     
 end
 
