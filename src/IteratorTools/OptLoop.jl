@@ -100,6 +100,7 @@ function eval_f(w::Vector, cache::SharedCache)
 
     @unpack  iter, uh, ph, adjp, am= cache
     @unpack JJfact, adesign, vbcase, timesol,solver = adjp
+    @unpack thick_penalty = solver
 
     meshinfo = vbcase.meshp.meshinfo
     physicalp = vbcase.simulationp.physicalp
@@ -132,7 +133,7 @@ function eval_f(w::Vector, cache::SharedCache)
     J,_ = JJfact
 
     
-    fval, CDCL = obj_fun(am, vbcase, uh,ph, J)
+    fval, CDCL = obj_fun(am, vbcase, uh,ph,thick_penalty, J)
     #### Adjoint Boundary Conditions
     #use the CLCD value to set the Boundary Condition
     adj_bc = -dJobj_fun(J, CDCL)
@@ -145,7 +146,8 @@ end
 function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
     @unpack  iter, uh, ph, adjp, am, adj_bc, CDCL= cache
     @unpack JJfact,adesign, vbcase, timesol,solver = adjp
-    
+    @unpack thick_penalty = solver
+
     _,Jfact = JJfact
     
     airfoil_case= vbcase
@@ -161,11 +163,12 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
 
     Jcorr = Jfact(CDCL) ## correction factor
 
-    Jtot = iterate_perturbation(shiftv,adesign,am, airfoil_case,uh,uhadj, Jcorr )
-    @info "Gradient: $Jtot"
-    
+    Ju,Jt = iterate_perturbation(shiftv,adesign,am, airfoil_case,thick_penalty, uh,uhadj, Jcorr )
+    @info "Adjoint Gradient: $Ju"
+    @info "Thickness Penalty Gradient: $Jt"
 
-    grad[:] = Jtot #update the gradients
+
+    grad[:] = Ju+Jt #update the gradients
 
     #update values iteration
     adj_sol = AdjSolution(iter, cache.fval, CDCL, w, grad, am, adj_bc, cache.Cp, uh, ph, uhadj, phadj  )
@@ -178,12 +181,13 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
 end
 
 
-function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel, airfoil_case::Airfoil, uh,uhadj, Jcorr::Real )
+function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel, airfoil_case::Airfoil, thick_penalty::ThickPenalty, uh,uhadj, Jcorr::Real )
     Ndes = length(shift)
 
     meshinfo = airfoil_case.meshp.meshinfo
     physicalp =airfoil_case.simulationp.physicalp
     Ji = zeros(Ndes)
+    Jthickness = zeros(Ndes)
     for (i,ss) in enumerate(shift)
         @info "Perturbation Domain $i"
 
@@ -192,9 +196,9 @@ function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am
         model_tmp = GmshDiscreteModel(modelname_tmp)
         am_tmp =  AirfoilModel(model_tmp, airfoil_case; am=am)
 
-        Ji[i] = compute_sensitivity(am, am_tmp,ss, airfoil_case, uh,uhadj,Jcorr) 
+        Ji[i],Jthickness[i] = compute_sensitivity(am, am_tmp,ss, airfoil_case,thick_penalty, uh,uhadj,Jcorr) 
 
     end
     
-    return Ji
+    return Ji, Jthickness
 end

@@ -8,7 +8,7 @@ am0:: Airfoil model of pertubed geometry
 δ:: is the signed perturbation
 """
 
-function compute_sensitivity(am0::AirfoilModel,am1::AirfoilModel,  δ::Float64, simcase::Airfoil,  uh,uhadj, Jcorr::Real)
+function compute_sensitivity(am0::AirfoilModel,am1::AirfoilModel,  δ::Float64, simcase::Airfoil,thick_penalty::ThickPenalty,  uh,uhadj, Jcorr::Real)
 
     @sunpack D,order,u_in, ν = simcase
     @unpack VV0, dΩ, reffe = am0.params
@@ -29,5 +29,19 @@ function compute_sensitivity(am0::AirfoilModel,am1::AirfoilModel,  δ::Float64, 
     J_sens = -Jcorr .*    sum(-ν* ∫( ((∇(uh) ⋅ tΓ) ⋅ nΓ) * ((∇(uhadj) ⋅ tΓ) ⋅ nΓ) ⋅ (v_field ⋅nΓ) )dΓ)
 
     return J_sens
+    
+end
+
+
+function compute_∇thickness_penalty(am0::AirfoilModel,am1::AirfoilModel,  δ::Float64, thick_penalty::ThickPenalty)
+    @unpack tmin, α, valid = thick_penalty
+    if valid 
+        tp0 = thickness_penalty(am0, tmin, α)
+        tp1 = thickness_penalty(am1, tmin, α)
+        return (tp1 - tp0)/δ
+    else
+        return 0.0
+    end
+
     
 end

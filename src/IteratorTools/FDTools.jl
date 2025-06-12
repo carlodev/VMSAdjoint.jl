@@ -4,6 +4,7 @@ Iterator for Finite Difference Analysis
 """
 function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem; idxs::Vector{Int64}=Int64[])
     @unpack timesol, adesign, J, vbcase, solver= adjoint_airfoil_problem
+    @unpack thick_penalty = solver
     @sunpack order = vbcase
     
 
@@ -44,7 +45,7 @@ function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem; idx
    
 
     uh0,ph0 = solve_inc_primal(am, airfoil_case, filename, timesol)    
-    fval0, CLCD0 = obj_fun(am, airfoil_case, uh0,ph0, J)
+    fval0, CLCD0 = obj_fun(am, airfoil_case, uh0,ph0,thick_penalty, J)
     fval_fd, CLCD_fd = iterate_fd(shiftv,idxs, adesign,am,airfoil_case,timesol, J )
 
     fval_grad = (fval_fd .- fval0)./shiftv

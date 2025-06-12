@@ -53,6 +53,18 @@ Check bounds_w to see how they are used
 end
 
 """
+    ThickPenalty
+
+Contains info on the thickness penalty constraint
+"""
+@with_kw struct ThickPenalty
+    valid::Bool=true #decide to compute or not the thickness penalty
+    tmin::Float64=0.005 #minimum thickness
+    α::Real=1_000.0 #value to enphasize the thickness violation
+end
+
+
+"""
     AdjSolver
 
 Settings for the adjoint solver
@@ -64,6 +76,7 @@ Settings for the adjoint solver
     δ::Float64=0.0001 #Perturbation of the design parameters for finite differences
     bounds::DesignBounds = DesignBounds()
     scaled::Bool = false
+    thick_penalty::ThickPenalty=ThickPenalty()
 end
 
 

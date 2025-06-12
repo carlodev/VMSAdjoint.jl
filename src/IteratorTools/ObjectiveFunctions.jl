@@ -42,9 +42,11 @@ end
 It computes the value of the objective function fun. It has a penalty to have a minimum thickness.
 It gives fitnessvalue, [CD,CL]
 """
-function obj_fun(am::AirfoilModel, vbcase::Airfoil, uh, ph, fun::Function)
+function obj_fun(am::AirfoilModel, vbcase::Airfoil, uh, ph, thick_penalty::ThickPenalty, fun::Function)
     @sunpack order = vbcase
     @unpack model, params = am
+    @unpack tmin, α, valid = thick_penalty
+
 
     Γ = BoundaryTriangulation(model; tags="airfoil")
     dΓ = Measure(Γ, 2 * order)
@@ -53,17 +55,19 @@ function obj_fun(am::AirfoilModel, vbcase::Airfoil, uh, ph, fun::Function)
     physicalp = vbcase.simulationp.physicalp
     CD, CL = compute_airfoil_coefficients(uh, ph, nΓ, dΓ, physicalp)
 
-    thick_pen = thickness_penalty(am)
+    thick_pen = (valid) ? thickness_penalty(am, tmin,α ) : 0.0
     fitnessval = fun([CD, CL])
 
     println("----------")
-    println("fitnessval = $(fitnessval) ; thickness_penalty = $(thick_pen)")
+    println("fitnessval = $(fitnessval) ")
+    println("thickness_penalty = $(thick_pen)")
     println("----------")
 
     return fitnessval + thick_pen, [CD, CL]
 end
 
-function thickness_penalty(am::AirfoilModel; tmin=0.005, α=1_000.0)
+function thickness_penalty(am::AirfoilModel, tmin::Float64, α::Real)
+    @assert α>0.0 "α has to be positive, α = $α not valid"
     
     leading_edge_cutoff = 0.01
     trailing_edge_cutoff = 0.01

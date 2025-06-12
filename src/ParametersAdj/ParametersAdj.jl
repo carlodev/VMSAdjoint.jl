@@ -15,6 +15,7 @@ export AirfoilScalar
 export AirfoilModel
 export AirfoilMesh
 export DesignBounds
+export ThickPenalty
 export AdjSolver
 export AdjointProblem
 export AdjSolution

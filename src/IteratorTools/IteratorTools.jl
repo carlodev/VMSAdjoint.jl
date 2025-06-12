@@ -22,6 +22,7 @@ using ForwardDiff
 export compute_airfoil_coefficients
 export obj_fun
 export dJobj_fun
+export thickness_penalty
 include("ObjectiveFunctions.jl")
 
 export compute_sensitivity
