@@ -178,7 +178,7 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
 end
 
 
-function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel, airfoil_case::Airfoil, uh,uhadj, Jcorr::Float64 )
+function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel, airfoil_case::Airfoil, uh,uhadj, Jcorr::Real )
     Ndes = length(shift)
 
     meshinfo = airfoil_case.meshp.meshinfo

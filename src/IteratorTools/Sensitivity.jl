@@ -8,7 +8,7 @@ am0:: Airfoil model of pertubed geometry
 δ:: is the signed perturbation
 """
 
-function compute_sensitivity(am0::AirfoilModel,am1::AirfoilModel,  δ::Float64, simcase::Airfoil,  uh,uhadj, Jcorr::Float64)
+function compute_sensitivity(am0::AirfoilModel,am1::AirfoilModel,  δ::Float64, simcase::Airfoil,  uh,uhadj, Jcorr::Real)
 
     @sunpack D,order,u_in, ν = simcase
     @unpack VV0, dΩ, reffe = am0.params
