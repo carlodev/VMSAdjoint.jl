@@ -36,7 +36,7 @@ meshinfo = AirfoilMesh(AoA= AoA, meshref=2)
 meshp = MeshParameters((1,1), 2, meshinfo)
 exportp = ExportParameters(printinitial=true,printmodel=true,name_tags=["airfoil"], fieldexport=[["uh","ph","friction"]])
 
-solverp = SolverParameters(θ=1.0)
+solverp = SolverParameters(θ=1.0, M=10, matrix_freq_update=4)
 
 simparams = SimulationParameters(timep,physicalp,solverp,exportp)
 
@@ -46,14 +46,18 @@ airfoil_case = Airfoil(meshp,simparams,sprob)
 
 function J(CDCL; CLtarget=0.75)
     CD,CL=CDCL
-    return -CL #0.5 * (CL - CLtarget)^2
+    return CD/CL #0.5 * (CL - CLtarget)^2
 end  
 
+function Jfact(CDCL; CLtarget=0.75)
+    CD,CL=CDCL
+    return 1.0 #as Float64  
+end  
 
 
 adj_solver = AdjSolver(δ=0.0001)
 
-adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:unsteady, J)
+adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:unsteady, (J,Jfact))
 finite_difference_analysis(adjoint_airfoil_problem)
 
 

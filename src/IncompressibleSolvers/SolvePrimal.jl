@@ -81,7 +81,7 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     uh0 = interpolate(u0(0.0), U(0.0))
     ph0 = interpolate(p0(0.0), P(0.0))
 
-    if isnothing(uh00)
+    if isnothing(uh00) && t_endramp ==  t0
         #initialize with steady solution
         uh00,ph00 = solve_inc_primal_steady(am, simcase, nothing, uh00,uh00)
     end

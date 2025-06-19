@@ -50,12 +50,12 @@ airfoil_case = Airfoil(meshp,simparams,sprob)
 #The boundary conditions are defined as -dJ/dCDCL
 function J(CDCL; CLtarget=0.75)
     CD,CL=CDCL
-    return CD  #0.5 * (CL - CLtarget)^2
+    return CD/CL  #0.5 * (CL - CLtarget)^2
 end  
 
 function Jfact(CDCL; CLtarget=0.75)
     CD,CL=CDCL
-    return 2.0 #as Float64  
+    return 1.0 #as Float64  
 end  
 
 
