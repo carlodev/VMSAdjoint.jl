@@ -53,6 +53,21 @@ Check bounds_w to see how they are used
 end
 
 """
+IdF(y) 
+    Identity function - regularization not happening
+"""
+function IdF(y::Vector{Float64}) 
+    return y
+end
+
+@with_kw struct Regularization
+    active::Bool = false
+    iter_reg::Int64 = 2
+    fun::Function = IdF
+end
+
+
+"""
     ThickPenalty
 
 Contains info on the thickness penalty constraint
@@ -77,6 +92,7 @@ Settings for the adjoint solver
     bounds::DesignBounds = DesignBounds()
     scaled::Bool = false
     thick_penalty::ThickPenalty=ThickPenalty()
+    regularization::Regularization=Regularization()
 end
 
 

@@ -25,6 +25,9 @@ export dJobj_fun
 export thickness_penalty
 include("ObjectiveFunctions.jl")
 
+export regularize_airfoil
+include("RegularizationTools.jl")
+
 export compute_sensitivity
 include("Sensitivity.jl")
 
