@@ -46,10 +46,17 @@ end
 
 
 function bounds_w(adesign::AirfoilCSTDesign,  Ndes::Int64, bounds::DesignBounds)
+    @unpack upper, lower, Δy = bounds
+
     Nhalf = Int(Ndes ÷ 2)
     nose = 0.08
     lb = [nose; nose; nose; -0.15.* ones(Nhalf-3); -1.5 .* ones(Nhalf)]
     ub = [1.5 .* ones(Nhalf); nose; -nose;-nose; 0.15 .* ones(Nhalf-3)]
+    
+    @info "Bounds settings"
+    println("lower:$lb")
+    println("upper:$ub")
+
     return lb,ub
 end
 
@@ -100,7 +107,7 @@ function eval_f(w::Vector, cache::SharedCache)
 
     @unpack  iter, uh, ph, adjp, am= cache
     @unpack JJfact, adesign, vbcase, timesol,solver = adjp
-    @unpack thick_penalty = solver
+    @unpack thick_penalty,regularization = solver
 
     meshinfo = vbcase.meshp.meshinfo
     physicalp = vbcase.simulationp.physicalp
@@ -111,6 +118,9 @@ function eval_f(w::Vector, cache::SharedCache)
 
     #create the new airfoil model from the weights w
     adesign = create_AirfoilDesign(adesign,w)
+    
+    adesign = regularize_airfoil(adesign, iter, regularization) #design regularization
+    
     modelname =create_msh(meshinfo,adesign, physicalp ; iter = iter)
     model = GmshDiscreteModel(modelname)
 
