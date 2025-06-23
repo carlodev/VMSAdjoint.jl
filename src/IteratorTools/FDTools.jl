@@ -3,12 +3,9 @@
 Iterator for Finite Difference Analysis
 """
 function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem; idxs::Vector{Int64}=Int64[])
-    @unpack timesol, adesign, JJfact, vbcase, solver= adjoint_airfoil_problem
+    @unpack timesol, adesign, J, vbcase, solver= adjoint_airfoil_problem
     @unpack thick_penalty = solver
     @sunpack order = vbcase
-    
-
-    J, _ = JJfact
 
 
     fddir = "FD"

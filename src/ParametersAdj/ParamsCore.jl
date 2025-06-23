@@ -108,19 +108,22 @@ struct AdjointProblem
     adesign::AirfoilDesign
     vbcase::VelocityBoundaryCase
     solver::AdjSolver
-    timesol::Symbol
-    JJfact::Tuple #(objective function, adjoint correction factor from the TLF, usually = 2 if J is CL or CD optimization)
-    function AdjointProblem(   adesign::AirfoilDesign,vbcase::VelocityBoundaryCase,solver::AdjSolver,timesol::Symbol,JJfact::Tuple)
-        if timesol ∉ (:steady, :unsteady)
-            throw(ArgumentError("Invalid timesol: $timesol. Must be :steady, :unsteady"))
+    timesol::Tuple{Symbol,Symbol}
+    J::Function #(objective function)
+    function AdjointProblem(   adesign::AirfoilDesign,vbcase::VelocityBoundaryCase,solver::AdjSolver,timesol::Tuple{Symbol,Symbol},J::Function)
+        for at in timesol
+            if at ∉ (:steady, :unsteady)
+                throw(ArgumentError("Invalid timesol: $timesol. Must be :steady, :unsteady"))
+            end
         end
-        new(adesign, vbcase,solver,timesol,JJfact)
+        
+        new(adesign, vbcase,solver,timesol,J)
     end
 end
 
-function AdjointProblem(    adesign::AirfoilDesign,vbcase::VelocityBoundaryCase,timesol::Symbol, JJfact::Tuple)
+function AdjointProblem(    adesign::AirfoilDesign,vbcase::VelocityBoundaryCase,timesol::Tuple{Symbol,Symbol}, J::Function)
     solver=AdjSolver()
-return     AdjointProblem(    adesign,vbcase,solver,timesol,JJfact)
+return     AdjointProblem(    adesign,vbcase,solver,timesol,J)
 end
 
 """

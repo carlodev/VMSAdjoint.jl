@@ -106,7 +106,7 @@ end
 function eval_f(w::Vector, cache::SharedCache)
 
     @unpack  iter, uh, ph, adjp, am= cache
-    @unpack JJfact, adesign, vbcase, timesol,solver = adjp
+    @unpack J, adesign, vbcase, timesol,solver = adjp
     @unpack thick_penalty,regularization = solver
 
     meshinfo = vbcase.meshp.meshinfo
@@ -135,12 +135,11 @@ function eval_f(w::Vector, cache::SharedCache)
            filename = "sol_$(iter)"
     end
 
-    uh,ph = solve_inc_primal(am, vbcase, filename, timesol; uh0=uh,ph0=ph)    
+    uh,ph = solve_inc_primal(am, vbcase, filename, timesol[1]; uh0=uh,ph0=ph)    
  
     #### extract results from primal solution: Cp (and Cf)
     PressureCoefficient = get_aerodynamic_features(am,uh,ph)
 
-    J,_ = JJfact
 
     
     fval, CDCL = obj_fun(am, vbcase, uh,ph,thick_penalty, J)
@@ -155,25 +154,21 @@ end
 
 function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
     @unpack  iter, uh, ph, adjp, am, adj_bc, CDCL= cache
-    @unpack JJfact,adesign, vbcase, timesol,solver = adjp
+    @unpack J,adesign, vbcase, timesol,solver = adjp
     @unpack thick_penalty = solver
-
-    _,Jfact = JJfact
     
     airfoil_case= vbcase
     adesign = create_AirfoilDesign(adesign,w)
 
 
-    uhadj,phadj = solve_inc_adj(am, airfoil_case, adj_bc, "inc-adj-steady-$iter", :steady, uh, ph)
+    uhadj,phadj = solve_inc_adj(am, airfoil_case, adj_bc, "inc-adj-"*string( timesol[2]) *"-$iter", timesol[2], uh, ph)
 
     Ndes = length(w) #number of design parameters
     δ = solver.δ #0.0001
     shift = CSTweights(Int(Ndes/2), δ)
     shiftv =   vcat(shift) #[δ,δ,δ,δ,δ...., -δ,-δ,-δ,-δ,.....]
 
-    Jcorr = Jfact(CDCL) ## correction factor
-
-    Ju,Jt = iterate_perturbation(shiftv,adesign,am, airfoil_case,thick_penalty, uh,uhadj, Jcorr )
+    Ju,Jt = iterate_perturbation(shiftv,adesign,am, airfoil_case,thick_penalty, uh,uhadj )
     @info "Adjoint Gradient: $Ju"
     @info "Thickness Penalty Gradient: $Jt"
 
@@ -191,7 +186,7 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
 end
 
 
-function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel, airfoil_case::Airfoil, thick_penalty::ThickPenalty, uh,uhadj, Jcorr::Real )
+function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel, airfoil_case::Airfoil, thick_penalty::ThickPenalty, uh,uhadj )
     Ndes = length(shift)
 
     meshinfo = airfoil_case.meshp.meshinfo
@@ -206,7 +201,7 @@ function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am
         model_tmp = GmshDiscreteModel(modelname_tmp)
         am_tmp =  AirfoilModel(model_tmp, airfoil_case; am=am)
 
-        Ji[i],Jthickness[i] = compute_sensitivity(am, am_tmp,ss, airfoil_case,thick_penalty, uh,uhadj,Jcorr) 
+        Ji[i],Jthickness[i] = compute_sensitivity(am, am_tmp,ss, airfoil_case,thick_penalty, uh,uhadj) 
 
     end
     

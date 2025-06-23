@@ -94,6 +94,8 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     xh0 = interpolate([uh0, ph0], X(0.0))
 
     updatekey(am.params, :uh,uh0)
+    updatekey(am.params, :ph,ph0)
+
     m, res, rhs =  equations_primal( simcase, am.params,:unsteady)
 
     op = TransientLinearFEOperator((res, m), rhs, X, Y)
@@ -128,6 +130,10 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
 
         end
     end
+    updatekey(am.params,:UH,UH)
+    updatekey(am.params,:PH,PH)
+
+    jldsave("UnsteadyPrimalFields.jld2"; am)
 
     avg_UH,avg_PH = time_average_fields(UH,PH, time_window,dt, t0)
 
@@ -144,13 +150,13 @@ function time_average_fields(UH,PH, time_window,dt::Float64, t0::Float64)
     nt = length(UH)
     
     #Time to start the averaging
-    t_0 = time_window[1]
+    t_0, t_F = time_window
 
     # Reconstruct time values (t0, t0+dt, ..., tF)
     times = t0:dt:(t0 + dt*(nt-1))
 
     # Find indices where t ≥ t01
-    indices = findall(t -> t ≥ t_0, times)
+    indices = findall(t -> t_F  ≥ t ≥ t_0, times)
 
     # Average the snapshots over the selected indices
     avg_UH = Statistics.mean(UH[indices])
