@@ -194,7 +194,7 @@ function solve_inc_adj_unsteady(am::AirfoilModel, simcase::Airfoil,d_boundary::V
     t_length = length(time_vec)
 
     createpvd(filename) do pvd
-        pvd[t_length] = createvtk(Ω, nsubcells = order, joinpath(res_path, "$(filename)_$tF" * ".vtu"), cellfields=["uh-adj" => uh0_adj, "ph-adj" => ph0_adj])
+        pvd[time_vec[end]] = createvtk(Ω, nsubcells = order, joinpath(res_path, "$(filename)_$tF" * ".vtu"), cellfields=["uh-adj" => uh0_adj, "ph-adj" => ph0_adj])
         for (idx,(t, xhtn)) in enumerate(sol)
             ϕu = xhtn[1]
             ϕp = xhtn[2]
@@ -219,7 +219,7 @@ function solve_inc_adj_unsteady(am::AirfoilModel, simcase::Airfoil,d_boundary::V
 
     jldsave("UnsteadyAdjointFields.jld2"; UH_ADJ,PH_ADJ)
 
-    time_window_adj = (time_window[1], tF - time_window[1])
+    time_window_adj = (tF - time_window[1], tF - 10*dt)
 
     @assert time_window_adj[2] > time_window_adj[1] "Adjoint Time Window Averaging not consistent"
 
