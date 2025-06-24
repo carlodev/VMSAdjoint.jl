@@ -68,7 +68,7 @@ function equations_adjoint( simcase::Airfoil,params::Dict{Symbol,Any},::Val{:uns
 
 
     time_sign = 1.0
-    m_adj(t, (u, p), (v, q)) =   time_sign *∫(u ⋅ v)dΩ +  ∫( Tm ⋅ (-uh ⋅ ∇(v) - ∇(v) ⋅ uh - ∇(q)) ⋅ u)dΩ
+    m_adj(t, (u, p), (v, q)) =   time_sign *∫(u ⋅ v)dΩ -  ∫( Tm ⋅ (-uh ⋅ ∇(v) - ∇(v) ⋅ uh - ∇(q)) ⋅ u)dΩ
 
 
     res_adj(t, (u, p), (v, q)) = res_adj_s( (u, p), (v, q))
