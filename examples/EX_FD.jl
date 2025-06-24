@@ -49,15 +49,11 @@ function J(CDCL; CLtarget=0.75)
     return CD/CL #0.5 * (CL - CLtarget)^2
 end  
 
-function Jfact(CDCL; CLtarget=0.75)
-    CD,CL=CDCL
-    return 1.0 #as Float64  
-end  
 
 
 adj_solver = AdjSolver(δ=0.0001)
 
-adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:unsteady, (J,Jfact))
+adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:unsteady)
 finite_difference_analysis(adjoint_airfoil_problem)
 
 

@@ -53,17 +53,12 @@ function J(CDCL; CLtarget=0.75)
     return CD/CL  #0.5 * (CL - CLtarget)^2
 end  
 
-function Jfact(CDCL; CLtarget=0.75)
-    CD,CL=CDCL
-    return 1.0 #as Float64  
-end  
-
 
 #Perturbation of your design parameters. The one on the pressure side are pertubed by -δ; so the deformation is always outward
 adj_solver = AdjSolver(δ=0.0001)
 
 #here you can choose :steady or :unsteady for the resolution of the primal flow. The unsteady solution is always initialized from a steady one.
-adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:unsteady, (J,Jfact) )
+adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:unsteady, J )
 
 
 
