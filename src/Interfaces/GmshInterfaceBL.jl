@@ -215,7 +215,7 @@ function create_msh(airfoil_points::AirfoilPoints; H=8.0, Lback =8.0, AoA=0.0, i
 
     
     #Points
-    gmsh.model.addPhysicalGroup(0, [trailing,top_le_point,bottom_le_point], -1, "airfoil")
+    gmsh.model.addPhysicalGroup(0, [trailing,top_le_point,bottom_le_point, top_points..., bottom_points...,], -1, "airfoil")
     gmsh.model.addPhysicalGroup(0, [trailing], -1, "trailing")
 
 
