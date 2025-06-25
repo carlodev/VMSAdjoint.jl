@@ -171,17 +171,17 @@ function create_msh(airfoil_points::AirfoilPoints; H=8.0, Lback =8.0, AoA=0.0, i
     gmsh.model.geo.mesh.setTransfiniteCurve(-limits_lines[1], 20, "Progression", 1.0)
 
     gmsh.model.geo.mesh.setTransfiniteCurve(outlet_lines[1], 20, "Progression", 1.0)
-    gmsh.model.geo.mesh.setTransfiniteCurve(-inlet_lines[1]  , 20, "Progression", 1.0)
+    gmsh.model.geo.mesh.setTransfiniteCurve(-inlet_lines[1]  , 40, "Progression", 1.0)
   
 
     gmsh.model.geo.mesh.setTransfiniteCurve(top_spline  , 201, "Progression", 1.0)
     gmsh.model.geo.mesh.setTransfiniteCurve(bottom_spline  , 100, "Progression", 1.0)
-    gmsh.model.geo.mesh.setTransfiniteCurve(leading_edge_spline  , 30, "Progression", 1.0)
+    gmsh.model.geo.mesh.setTransfiniteCurve(leading_edge_spline  , 40, "Progression", 1.0)
     
     gmsh.model.mesh.field.add("BoundaryLayer", 1)
     gmsh.model.mesh.field.setNumbers(1, "CurvesList", [top_spline, bottom_spline,leading_edge_spline])
     gmsh.model.mesh.field.setNumber(1, "Size", 1e-4)    # first layer height
-    gmsh.model.mesh.field.setNumber(1, "SizeFar", 0.001)    # first layer height
+    gmsh.model.mesh.field.setNumber(1, "SizeFar", 0.01) 
     gmsh.model.mesh.field.setNumber(1, "Thickness", 0.02)    # total thickness
     gmsh.model.mesh.field.setNumber(1, "Ratio", 1.12)          # growth rate
     gmsh.model.mesh.field.setNumber(1, "Quads", 1)         
@@ -193,8 +193,8 @@ function create_msh(airfoil_points::AirfoilPoints; H=8.0, Lback =8.0, AoA=0.0, i
     gmsh.model.mesh.field.add("Box", 2)
     gmsh.model.mesh.field.setNumber(2, "VIn", 0.03)
     gmsh.model.mesh.field.setNumber(2, "VOut", 0.5)
-    gmsh.model.mesh.field.setNumber(2, "XMin", 0.25)
-    gmsh.model.mesh.field.setNumber(2, "XMax", 2.0)
+    gmsh.model.mesh.field.setNumber(2, "XMin", 0.9)
+    gmsh.model.mesh.field.setNumber(2, "XMax", 3.0)
     gmsh.model.mesh.field.setNumber(2, "YMin", -0.45)
     gmsh.model.mesh.field.setNumber(2, "YMax", 0.45)
 
@@ -205,8 +205,6 @@ function create_msh(airfoil_points::AirfoilPoints; H=8.0, Lback =8.0, AoA=0.0, i
     # Set background mesh field
     gmsh.model.mesh.field.setAsBackgroundMesh(3)
 
-    # If only the box refinement (no BL field), use:
-    # gmsh.model.mesh.field.setAsBackgroundMesh(2)
 
     gmsh.model.geo.synchronize()
     gmsh.option.setNumber("Mesh.RecombineAll", 1)
@@ -215,9 +213,12 @@ function create_msh(airfoil_points::AirfoilPoints; H=8.0, Lback =8.0, AoA=0.0, i
 
     
     #Points
-    gmsh.model.addPhysicalGroup(0, [trailing,top_le_point,bottom_le_point, top_points..., bottom_points...,], -1, "airfoil")
-    gmsh.model.addPhysicalGroup(0, [trailing], -1, "trailing")
+    # gmsh.model.addPhysicalGroup(0, [trailing,top_le_point,bottom_le_point, top_points..., bottom_points..., leading_edge_points...], -1, "airfoil")
+    
+    gmsh.model.addPhysicalGroup(0, [trailing,top_le_point,bottom_le_point,], -1, "airfoil")
 
+    gmsh.model.addPhysicalGroup(0, [trailing], -1, "trailing")
+    
 
 
     gmsh.model.addPhysicalGroup(0, [1,2,3,4],-1,"limits")
