@@ -187,7 +187,7 @@ function create_msh(airfoil_points::AirfoilPoints; H=8.0, Lback =8.0, AoA=0.0, i
    
     top_spline = gmsh.model.geo.addSpline([top_le_point, top_points...,trailing])
     bottom_spline = gmsh.model.geo.addSpline([bottom_le_point,bottom_points...,trailing])
-    gmsh.model.geo.addSpline(leading_edge_points)
+    leading_edge_spline = gmsh.model.geo.addSpline(leading_edge_points)
     
     
 

@@ -125,7 +125,7 @@ function eval_f(w::Vector, cache::SharedCache)
     model = GmshDiscreteModel(modelname)
 
     writevtk(model, "model_$iter")
-    am =  AirfoilModel(model, vbcase; am=am)
+    am =  AirfoilModel(model, vbcase)
 
 
     #Solve Primal 
@@ -135,7 +135,7 @@ function eval_f(w::Vector, cache::SharedCache)
            filename = "sol_$(iter)"
     end
 
-    uh,ph = solve_inc_primal(am, vbcase, filename, timesol[1]; uh0=uh,ph0=ph)    
+    uh,ph = solve_inc_primal(am, vbcase, filename, timesol[1]; uh0=nothing,ph0=nothing)    
  
     #### extract results from primal solution: Cp (and Cf)
     PressureCoefficient = get_aerodynamic_features(am,uh,ph)
@@ -199,11 +199,12 @@ function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am
         adesign_tmp = perturb_DesignParameter(adesign, i, ss)
         modelname_tmp =create_msh(meshinfo,adesign_tmp, physicalp,"MeshPerturb"; iter = i+100)
         model_tmp = GmshDiscreteModel(modelname_tmp)
-        am_tmp =  AirfoilModel(model_tmp, airfoil_case; am=am)
+        am_tmp =  AirfoilModel(model_tmp, airfoil_case)
 
-        Ji[i],Jthickness[i] = compute_sensitivity(am, am_tmp,ss, airfoil_case,thick_penalty, uh,uhadj) 
+        Ji[i],Jthickness[i] = compute_sensitivity(am, am_tmp,adesign, i,ss, airfoil_case,thick_penalty, uh,uhadj) 
 
     end
     
     return Ji, Jthickness
 end
+

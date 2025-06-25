@@ -19,7 +19,7 @@ export verifykey
 include("ParamsInterfaces.jl")
 
 export create_msh
-include("GmshInterface.jl")
+include("GmshInterfaceBL.jl")
 
 export get_aerodynamic_features
 include("GridapInterface.jl")
