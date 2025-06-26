@@ -16,6 +16,36 @@ function uniqueidx(v::AbstractVector)
     return idxs
 end
 
+
+
+function remove_outliers_from_curve(points::Vector, tol::Float64)
+
+    filtered_pts = Vector{typeof(points[1])}()
+    idxs = [1]
+    push!(filtered_pts, points[1])  # Keep first point
+
+    for i in 2:length(points)-1
+        p_prev = points[i-1]
+        p = points[i]
+        p_next = points[i+1]
+        
+        # Expected position from linear interpolation between neighbors
+        expected = 0.5 .* (p_prev + p_next)
+        deviation = norm(p - expected)        
+        if deviation < tol
+            push!(filtered_pts, p)
+            push!(idxs, i)
+
+        end
+    end
+
+    push!(filtered_pts, points[end])  # Keep last point
+    push!(idxs, length(points))
+
+    return filtered_pts, idxs
+end
+
+
 function get_nodes_idx(model, AoA::Float64, tag::String)
 
     f = (reffe) -> Gridap.Geometry.UnstructuredGrid(reffe)
@@ -39,7 +69,6 @@ function get_nodes_idx(model, AoA::Float64, tag::String)
     
     airfoil_points = airfoil_points0[idx_uniques]
     airfoil_normals =n_Γ_data[idx_uniques]
-
         
     idx_top = findall( map(a-> a[2] > 0.5 , airfoil_normals))
     idx_bottom = findall( map(a-> a[2] < -0.5 , airfoil_normals))
@@ -51,11 +80,16 @@ function get_nodes_idx(model, AoA::Float64, tag::String)
     IDX_TOP_UNIQUE=idx_uniques[IDX_TOP]
     IDX_BOTTOM_UNIQUE=idx_uniques[IDX_BOTTOM]
 
-    params=Dict(:IDX_TOP_UNIQUE=>IDX_TOP_UNIQUE,:IDX_BOTTOM_UNIQUE=>IDX_BOTTOM_UNIQUE,
+    airfoil_points[IDX_TOP],airfoil_points[IDX_BOTTOM]
+
+    airfoil_points_top,idx_top = remove_outliers_from_curve(airfoil_points[IDX_TOP], 0.01)
+    airfoil_points_bottom,idx_bottom = remove_outliers_from_curve(airfoil_points[IDX_BOTTOM], 0.01)
+
+    params=Dict(:IDX_TOP_UNIQUE=>IDX_TOP_UNIQUE[idx_top],:IDX_BOTTOM_UNIQUE=>IDX_BOTTOM_UNIQUE[idx_bottom],
     :IDX_TOP=>IDX_TOP,:IDX_BOTTOM=>IDX_BOTTOM)
 
 
-    return airfoil_points[IDX_TOP],airfoil_points[IDX_BOTTOM], params
+    return airfoil_points_top,airfoil_points_bottom, params
 end
 
 
