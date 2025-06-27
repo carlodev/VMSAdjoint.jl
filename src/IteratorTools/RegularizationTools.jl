@@ -8,8 +8,8 @@ end
 
 function regularize_airfoil(ad::AirfoilDesign, fun::Function)
     println("--- Regularization Airfoil ---")
-    yu_reg = fun(ad.ap.yu) #regularize top points airfoil
-    yl_reg = fun(ad.ap.yl) #regularize bottom points airfoil
+    yu_reg = fun(ad.ap.xu, ad.ap.yu) #regularize top points airfoil
+    yl_reg = fun(ad.ap.xl, ad.ap.yl) #regularize bottom points airfoil
     ap_new = AirfoilPoints(ad.ap.xu, ad.ap.xl, yu_reg, yl_reg)
     regularize_airfoil(ad, ap_new)
 end
