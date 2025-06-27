@@ -70,8 +70,8 @@ function get_nodes_idx(model, AoA::Float64, tag::String)
     airfoil_points = airfoil_points0[idx_uniques]
     airfoil_normals =n_Γ_data[idx_uniques]
         
-    idx_top = findall( map(a-> a[2] > 0.5 , airfoil_normals))
-    idx_bottom = findall( map(a-> a[2] < -0.5 , airfoil_normals))
+    idx_top = findall( map(a-> a[2] > 0.1 , airfoil_normals))
+    idx_bottom = findall( map(a-> a[2] < -0.1 , airfoil_normals))
 
     perm_top = sortperm(getindex.(airfoil_points[idx_top],1))
     perm_bottom = sortperm(getindex.(airfoil_points[idx_bottom],1))

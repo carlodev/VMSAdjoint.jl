@@ -13,6 +13,7 @@ using AirfoilTools
 export AirfoilNormals
 export AirfoilScalar
 export AirfoilModel
+export MeshSize
 export AirfoilMesh
 export DesignBounds
 export ThickPenalty

@@ -95,13 +95,19 @@ Settings for the adjoint solver
     regularization::Regularization=Regularization()
 end
 
+@with_kw struct MeshSize
+    BL_fl::Float64 = 1e-4 #fist layer height
+    BL_tt::Float64 = 0.02 #total thickness
+    airfoil_divisions::Int64 = 301
+    meshref::Int64=1 #increase it, and it wil increase the resolution. Put = 0 and it will be very coarse, useful to debug
+    H::Real = 8
+    Lback::Real = 8
+end
 
 @with_kw struct AirfoilMesh <:MeshInfo
     AoA::Real #Angle of Attack - degrees
-    meshref::Int64=1 #increase it, and it wil increase the resolution. Put = 0 and it will be very coarse, useful to debug
     folder::String="MeshFiles"
-    H::Real = 8
-    Lback::Real = 8
+    MS::MeshSize = MeshSize()
 end
 
 struct AdjointProblem

@@ -50,17 +50,15 @@ function find_origin_idx(leading_edge_points::Vector)
 end
 
 function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,  pp::PhysicalParameters ; iter::Int64= 0)
-    @unpack AoA, meshref, folder, H, Lback = am
-    @unpack ap = airfoil_design
-    return create_msh(ap;H=H, Lback =Lback, AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
+    @unpack folder = am
+    return create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,; iter=iter, chord = pp.c, folder = folder)
 end
 
 
 
 function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,  pp::PhysicalParameters, folder::String; iter::Int64= 0 , )
     @unpack AoA, meshref,H, Lback = am
-    @unpack ap = airfoil_design
-    return create_msh(ap; H=H, Lback =Lback, AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
+    return create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,; iter=iter, chord = pp.c, folder = folder)
 end
 
 """
@@ -68,17 +66,18 @@ end
 
 From a set of `airfoil_points` it creates the .msh file. Incresing `mesh_ref` is increasing the mesh density.
 """
-function create_msh(airfoil_points::AirfoilPoints; H=8.0, Lback =8.0, AoA=0.0, iter = 0, chord= 1.0, mesh_ref=1.0, folder="MeshFiles")
-
+function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign; iter = 0, chord= 1.0, folder="MeshFiles")
+    
+    airfoil_points = airfoil_design.ap
+    @unpack  Lback, H, meshref,BL_fl,BL_tt = am.MS
+    @unpack AoA = am
 
     gmsh.initialize()
     
     gmsh.model.add("Model1")
     Lback = Lback*chord
     H= H*chord
-    offset = 2.35
-    slant = 2.0
-    
+
     gmsh.model.geo.addPoint(Lback, -H, 0)
     gmsh.model.geo.addPoint(Lback, H, 0)
     
@@ -153,17 +152,18 @@ function create_msh(airfoil_points::AirfoilPoints; H=8.0, Lback =8.0, AoA=0.0, i
 
     #Airfoil Splines
    
-    top_spline = gmsh.model.geo.addSpline([top_le_point, top_points...,trailing])
-    bottom_spline = gmsh.model.geo.addSpline([bottom_le_point,bottom_points...,trailing])
-    leading_edge_spline= gmsh.model.geo.addSpline(leading_edge_points)
-    
+    # top_spline = gmsh.model.geo.addSpline([top_le_point, top_points...,trailing])
+    # bottom_spline = gmsh.model.geo.addSpline([bottom_le_point,bottom_points...,trailing])
+    # leading_edge_spline= gmsh.model.geo.addSpline(leading_edge_points)
+    airfoil_spline = gmsh.model.geo.addSpline(vcat(reverse([top_le_point, top_points...,trailing]),reverse(leading_edge_points), [bottom_le_point,bottom_points...,trailing] ) )
     
 
     # #Curve Loops
     gmsh.model.geo.addCurveLoop([- limits_lines[1],outlet_lines[1],  limits_lines[2], -inlet_lines[1]   ])
 
-    gmsh.model.geo.addCurveLoop([- top_spline, -leading_edge_spline,  bottom_spline   ])
+    # gmsh.model.geo.addCurveLoop([- top_spline, -leading_edge_spline,  bottom_spline   ])
 
+    gmsh.model.geo.addCurveLoop([airfoil_spline])
 
     gmsh.model.geo.addPlaneSurface([1,2])
     
@@ -174,19 +174,17 @@ function create_msh(airfoil_points::AirfoilPoints; H=8.0, Lback =8.0, AoA=0.0, i
     gmsh.model.geo.mesh.setTransfiniteCurve(-inlet_lines[1]  , 40, "Progression", 1.0)
   
 
-    gmsh.model.geo.mesh.setTransfiniteCurve(top_spline  , 201, "Progression", 1.0)
-    gmsh.model.geo.mesh.setTransfiniteCurve(bottom_spline  , 100, "Progression", 1.0)
-    gmsh.model.geo.mesh.setTransfiniteCurve(leading_edge_spline  , 40, "Progression", 1.0)
+    gmsh.model.geo.mesh.setTransfiniteCurve(airfoil_spline  , 403, "Bump", 1.1)
+
     
     gmsh.model.mesh.field.add("BoundaryLayer", 1)
-    gmsh.model.mesh.field.setNumbers(1, "CurvesList", [top_spline, bottom_spline,leading_edge_spline])
-    gmsh.model.mesh.field.setNumber(1, "Size", 1e-4)    # first layer height
+    gmsh.model.mesh.field.setNumbers(1, "CurvesList", [airfoil_spline])
+    gmsh.model.mesh.field.setNumber(1, "Size", BL_fl)    # first layer height
     gmsh.model.mesh.field.setNumber(1, "SizeFar", 0.01) 
-    gmsh.model.mesh.field.setNumber(1, "Thickness", 0.02)    # total thickness
+    gmsh.model.mesh.field.setNumber(1, "Thickness", BL_tt)    # total thickness
     gmsh.model.mesh.field.setNumber(1, "Ratio", 1.12)          # growth rate
     gmsh.model.mesh.field.setNumber(1, "Quads", 1)         
     gmsh.model.mesh.field.setAsBoundaryLayer(1)
-
 
 
     # Create the Box field (Field[2])
@@ -195,8 +193,10 @@ function create_msh(airfoil_points::AirfoilPoints; H=8.0, Lback =8.0, AoA=0.0, i
     gmsh.model.mesh.field.setNumber(2, "VOut", 0.5)
     gmsh.model.mesh.field.setNumber(2, "XMin", 0.9)
     gmsh.model.mesh.field.setNumber(2, "XMax", 3.0)
-    gmsh.model.mesh.field.setNumber(2, "YMin", -0.45)
-    gmsh.model.mesh.field.setNumber(2, "YMax", 0.45)
+    gmsh.model.mesh.field.setNumber(2, "YMin", -0.25)
+    gmsh.model.mesh.field.setNumber(2, "YMax", 0.35)
+    
+
 
     # If you already had Field[1] for boundary layer, you can combine:
     gmsh.model.mesh.field.add("Min", 3)
@@ -209,13 +209,13 @@ function create_msh(airfoil_points::AirfoilPoints; H=8.0, Lback =8.0, AoA=0.0, i
     gmsh.model.geo.synchronize()
     gmsh.option.setNumber("Mesh.RecombineAll", 1)
 
-    gmsh.option.setNumber("Mesh.SubdivisionAlgorithm", 1)  # or 0, depending on surface shape
+    # gmsh.option.setNumber("Mesh.SubdivisionAlgorithm", 1)  # or 0, depending on surface shape
 
     
     #Points
-    # gmsh.model.addPhysicalGroup(0, [trailing,top_le_point,bottom_le_point, top_points..., bottom_points..., leading_edge_points...], -1, "airfoil")
     
-    gmsh.model.addPhysicalGroup(0, [trailing,top_le_point,bottom_le_point,], -1, "airfoil")
+    # gmsh.model.addPhysicalGroup(0, [trailing,top_le_point,bottom_le_point,], -1, "airfoil")
+    # gmsh.model.addPhysicalGroup(0, [trailing,top_le_point,bottom_le_point,], -1, "airfoil")
 
     gmsh.model.addPhysicalGroup(0, [trailing], -1, "trailing")
     
@@ -224,7 +224,7 @@ function create_msh(airfoil_points::AirfoilPoints; H=8.0, Lback =8.0, AoA=0.0, i
     gmsh.model.addPhysicalGroup(0, [1,2,3,4],-1,"limits")
     
     #Lines
-    gmsh.model.addPhysicalGroup(1, [top_spline, leading_edge_spline,  bottom_spline],-1, "airfoil")
+    gmsh.model.addPhysicalGroup(1, [airfoil_spline],-1, "airfoil")
     gmsh.model.addPhysicalGroup(1, [limits_lines...],-1, "limits")
     gmsh.model.addPhysicalGroup(1, [outlet_lines...],-1, "outlet")
     gmsh.model.addPhysicalGroup(1, [inlet_lines...],-1, "inlet")

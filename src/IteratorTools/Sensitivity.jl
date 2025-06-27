@@ -71,12 +71,10 @@ function compute_sensitivity(am0::AirfoilModel,am1::AirfoilModel, rbfd::RBFDesig
 
     function fx_rbf(x)
             x1,y1 = rotation([x...],-AoA)
-            if 0.0<=x1<0.98
-                dist = norm([x1,y1] - [xr,yr] )
-                rb = AirfoilTools.AirfoilRBF.fRBF(dist, RB.support_radius, RB.fun)
-            else
-                rb = 0.0
-            end
+
+            dist = norm([x1,y1] - [xr,yr] )
+            rb = AirfoilTools.AirfoilRBF.fRBF(dist, RB.support_radius, RB.fun)
+ 
 
             return  VectorValue(0.0,float(rb))
     end
