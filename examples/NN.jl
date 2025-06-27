@@ -3,6 +3,9 @@ using AirfoilTools
 using VMSAdjoint
 using Gridap, GridapGmsh
 using SegregatedVMSSolver.ParametersDef
+
+using Plots
+
 """
 Example taken from:
 Sorgiovanni, G., Quadrio, M., Ponzini, R., 2016. A robust open-source adjoint optimization method for external aerodynamics. Politecnico di Milano, Milan.
@@ -45,20 +48,19 @@ airfoil_case = Airfoil(meshp,simparams,sprob)
 
 
 
-#Define the Objective Function, it only takes one argument [CD,CL], then you can define all the keywords you want
-#The boundary conditions are defined as -dJ/dCDCL
-function J(CDCL; CLtarget=0.75)
-    CD,CL=CDCL
-    return CD/CL  #0.5 * (CL - CLtarget)^2
-end  
+modelname =create_msh(meshinfo,rbfd, physicalp ; iter = 0)
+model = GmshDiscreteModel(modelname)
+
+using JLD2, Plots, VMSAdjoint
+sol = jldopen(joinpath(@__DIR__,  "ADJ_SOL2.jld2"))["adj_sol"]
+
+rbfd2= create_AirfoilDesign(rbfd, sol.βv)
+modelname2 =create_msh(meshinfo,rbfd2, physicalp,"MeshPerturb"; iter = 2+100)
+model2 = GmshDiscreteModel(modelname2)
+am2 =  AirfoilModel(model2, airfoil_case)
+
+get_aerodynamic_features(am2, uh,ph;tag="airfoil")
 
 
-#Perturbation of your design parameters. The one on the pressure side are pertubed by -δ; so the deformation is always outward
-adj_solver = AdjSolver(δ=0.0001)
-
-#here you can choose :steady or :unsteady for the resolution of the primal flow. The unsteady solution is always initialized from a steady one.
-adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,(:unsteady,:steady), J )
-
-
-
-solve_adjoint_optimization(adjoint_airfoil_problem)
+plot(am2.ap.xu, am2.ap.yu, aspect_ratio=:equal)
+plot!(am2.ap.xl, am2.ap.yl)

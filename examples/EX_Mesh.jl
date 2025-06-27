@@ -3,12 +3,7 @@ using AirfoilTools
 using VMSAdjoint
 using Gridap, GridapGmsh
 using SegregatedVMSSolver.ParametersDef
-"""
-Example taken from:
-Sorgiovanni, G., Quadrio, M., Ponzini, R., 2016. A robust open-source adjoint optimization method for external aerodynamics. Politecnico di Milano, Milan.
 
-Starting from a NACA0012 finding the derivaties with the adjoint method
-"""
 
 fname = "n0012.csv" #airfoil coordinates to load
 AoA = 2.5
@@ -30,10 +25,11 @@ rbfd = RBFDesign(rbfg, ap0)
 sprob = StabilizedProblem(VMS(2))
 
 physicalp = PhysicalParameters(Re=1000, u_in=[1.0,0.0])
-timep = TimeParameters(dt=0.05, tF=1.0, time_window=(0.8, 1.0)) #the time-window define the time-span for time-averaging
+timep = TimeParameters(dt=0.05, tF=10.0, time_window=(8.0, 10.0)) #the time-window define the time-span for time-averaging
 
+msh_size = MeshSize(BL_fl=1e-4,BL_tt=0.01 )
 
-meshinfo = AirfoilMesh(AoA= AoA, meshref=1)
+meshinfo = AirfoilMesh(AoA= AoA, MS=msh_size)
 meshp = MeshParameters((1,1), 2, meshinfo)
 exportp = ExportParameters(printinitial=true,printmodel=true,name_tags=["airfoil"], fieldexport=[["uh","ph","friction"]])
 
@@ -42,7 +38,6 @@ solverp = SolverParameters(θ=1.0,  M=1, matrix_freq_update=4) #keep θ=1.0 for 
 simparams = SimulationParameters(timep,physicalp,solverp,exportp)
 
 airfoil_case = Airfoil(meshp,simparams,sprob)
-
 
 
 #Define the Objective Function, it only takes one argument [CD,CL], then you can define all the keywords you want
@@ -59,6 +54,18 @@ adj_solver = AdjSolver(δ=0.0001)
 #here you can choose :steady or :unsteady for the resolution of the primal flow. The unsteady solution is always initialized from a steady one.
 adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,(:unsteady,:steady), J )
 
+#solve_adjoint_optimization(adjoint_airfoil_problem)
+using Gridap, VMSAdjoint
+modelname =create_msh(meshinfo,rbfd, physicalp ; iter = 0)
+model = GmshDiscreteModel(modelname)
+writevtk(model, "model_0n")
 
 
-solve_adjoint_optimization(adjoint_airfoil_problem)
+
+Γ = BoundaryTriangulation(model; tags="airfoil")
+dΓ = Measure(Γ, 2*2)
+nΓ = -get_normal_vector(Γ) #beacuse they point inward 
+
+writevtk(Γ, "nΓ", cellfields=["nΓ"=>nΓ])
+
+

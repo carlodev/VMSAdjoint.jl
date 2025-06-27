@@ -57,7 +57,6 @@ end
 
 
 function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,  pp::PhysicalParameters, folder::String; iter::Int64= 0 , )
-    @unpack AoA, meshref,H, Lback = am
     return create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,; iter=iter, chord = pp.c, folder = folder)
 end
 
@@ -174,7 +173,7 @@ function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign; iter = 0, ch
     gmsh.model.geo.mesh.setTransfiniteCurve(-inlet_lines[1]  , 40, "Progression", 1.0)
   
 
-    gmsh.model.geo.mesh.setTransfiniteCurve(airfoil_spline  , 403, "Bump", 1.1)
+    gmsh.model.geo.mesh.setTransfiniteCurve(airfoil_spline  , 403, "Bump", 1.2)
 
     
     gmsh.model.mesh.field.add("BoundaryLayer", 1)
