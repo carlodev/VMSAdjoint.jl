@@ -56,7 +56,7 @@ end
 IdF(y) 
     Identity function - regularization not happening
 """
-function IdF(y::Vector{Float64}) 
+function IdF(x::Vector{Float64}, y::Vector{Float64}) 
     return y
 end
 
