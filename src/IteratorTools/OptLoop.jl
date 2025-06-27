@@ -168,7 +168,7 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
     shift = CSTweights(Int(Ndes/2), δ)
     shiftv =   vcat(shift) #[δ,δ,δ,δ,δ...., -δ,-δ,-δ,-δ,.....]
 
-    Ju,Jt = iterate_perturbation(shiftv,adesign,am, airfoil_case,thick_penalty, uh,uhadj )
+    Ju,Jt = iterate_perturbation(shiftv,adesign,am, airfoil_case,solver, uh,uhadj )
     @info "Adjoint Gradient: $Ju"
     @info "Thickness Penalty Gradient: $Jt"
 
@@ -186,8 +186,9 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
 end
 
 
-function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel, airfoil_case::Airfoil, thick_penalty::ThickPenalty, uh,uhadj )
+function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel, airfoil_case::Airfoil, solver::AdjSolver, uh,uhadj )
     Ndes = length(shift)
+    @unpack thick_penalty,regularization = solver
 
     meshinfo = airfoil_case.meshp.meshinfo
     physicalp =airfoil_case.simulationp.physicalp
@@ -197,6 +198,8 @@ function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am
         @info "Perturbation Domain $i"
 
         adesign_tmp = perturb_DesignParameter(adesign, i, ss)
+        adesign_tmp = regularize_airfoil(adesign_tmp, 1, regularization) #design regularization
+
         modelname_tmp =create_msh(meshinfo,adesign_tmp, physicalp,"MeshPerturb"; iter = i+100)
         model_tmp = GmshDiscreteModel(modelname_tmp)
         am_tmp =  AirfoilModel(model_tmp, airfoil_case)
