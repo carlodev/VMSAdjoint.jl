@@ -198,8 +198,6 @@ function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am
         @info "Perturbation Domain $i"
 
         adesign_tmp = perturb_DesignParameter(adesign, i, ss)
-        adesign_tmp = regularize_airfoil(adesign_tmp, 1, regularization) #design regularization
-
         modelname_tmp =create_msh(meshinfo,adesign_tmp, physicalp,"MeshPerturb"; iter = i+100)
         model_tmp = GmshDiscreteModel(modelname_tmp)
         am_tmp =  AirfoilModel(model_tmp, airfoil_case)
