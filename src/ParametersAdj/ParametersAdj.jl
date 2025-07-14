@@ -10,6 +10,8 @@ using Gridap
 using SegregatedVMSSolver.ParametersDef
 using AirfoilTools
 
+export thickness_penalty_default
+
 export AirfoilNormals
 export AirfoilScalar
 export AirfoilModel

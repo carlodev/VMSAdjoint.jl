@@ -15,6 +15,7 @@ using JLD2
 # using NLopt
 using Optim
 using LineSearches
+using KissSmoothing
 
 using Interpolations
 using ForwardDiff

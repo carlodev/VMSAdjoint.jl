@@ -66,6 +66,30 @@ end
     fun::Function = IdF
 end
 
+function thickness_penalty_default(pp; tmin=0.005, α=1_000.0)
+    @assert α>0.0 "α has to be positive, α = $α not valid"
+
+    xx, yu,yl = pp
+
+    # Calculate thickness
+    Δy = yu - yl
+
+    # Check for minimum thickness violations
+    thickness_violations = tmin .- Δy
+    violations_locations = findall(thickness_violations.>0)
+    !isempty(violations_locations) && println("Violations Locations x= $(xx[violations_locations])")
+
+    #Σviolations^2
+    penalty = sum((violation > 0) ? violation^2 : 0.0 for violation in thickness_violations)
+
+
+    if isnan(penalty) || isinf(penalty)
+        @error "Invalid penalty value detected. Check airfoil coordinates."
+        return α   # Return a large penalty for invalid configurations
+    end
+
+    return penalty * α
+end
 
 """
     ThickPenalty
@@ -73,9 +97,8 @@ end
 Contains info on the thickness penalty constraint
 """
 @with_kw struct ThickPenalty
-    valid::Bool=true #decide to compute or not the thickness penalty
-    tmin::Float64=0.005 #minimum thickness
-    α::Real=1_000.0 #value to enphasize the thickness violation
+    valid::Bool=true #decide to compute or not the penalty based on airfoil points
+    thickness_penalty::Function= thickness_penalty_default
 end
 
 

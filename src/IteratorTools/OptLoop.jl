@@ -19,7 +19,7 @@ function solve_adjoint_optimization(adjp::AdjointProblem)
     ls = LineSearches.Static()
     step_options = LineSearches.InitialStatic(alpha=solver.αg, scaled=solver.scaled)
     # L-BFGS optimizer with line search control
-    result = optimize(f, ∇f!,lb,ub, w_init, Fminbox(LBFGS(alphaguess=step_options, linesearch = ls)),opt_options)
+    result = optimize(f, ∇f!,lb,ub, w_init, Fminbox(LBFGS(alphaguess=step_options, linesearch=ls)),opt_options)
     
     return true
 end
@@ -73,17 +73,18 @@ mutable struct SharedCache
     Cp
     adjp::AdjointProblem
     CDCL::Vector{Float64}
+    adesign
 end
 
 function make_f_and_∇f(adjp::AdjointProblem, N::Int64)
-    cache = SharedCache(NaN, zeros(N), true, -1, nothing, nothing, [0.0,0.0], nothing,nothing,adjp, [0.0,0.0])
+    cache = SharedCache(NaN, zeros(N), true, -1, nothing, nothing, [0.0,0.0], nothing,nothing,adjp, [0.0,0.0], nothing)
 
     x_last = similar(zeros(N))
 
     f(x) = begin
         if !isequal(x, x_last)
             copy!(x_last, x)
-            cache.fval, cache.iter, cache.uh, cache.ph, cache.adj_bc, cache.am, cache.Cp, cache.CDCL = eval_f(x, cache)  # compute both
+            cache.fval, cache.iter, cache.uh, cache.ph, cache.adj_bc, cache.am, cache.Cp, cache.CDCL, cache.adesign = eval_f(x, cache)  # compute both
         end
         return cache.fval
     end
@@ -92,7 +93,7 @@ function make_f_and_∇f(adjp::AdjointProblem, N::Int64)
 
         if !isequal(x, x_last)
             copy!(x_last, x)
-            cache.fval, cache.iter, cache.uh, cache.ph, cache.adj_bc, cache.am, cache.Cp, cache.CDCL = eval_f(x, cache)
+            cache.fval, cache.iter, cache.uh, cache.ph, cache.adj_bc, cache.am, cache.Cp, cache.CDCL,cache.adesign = eval_f(x, cache)
         end
         eval_∇f!(g, x, cache)  # must recompute if f not called
         copyto!(cache.grad, g)
@@ -101,6 +102,43 @@ function make_f_and_∇f(adjp::AdjointProblem, N::Int64)
     return f, ∇f!
 end
 
+function generate_regularized_model(adesign::AirfoilDesign, i::Int64, ss::Float64, meshinfo, physicalp, folder::String; initial_R=0.0, max_tries=50)
+    i_try = 0
+    model = nothing
+    R = initial_R
+    flag = true
+
+    function regf(x0, y0)
+        y1 = y0
+        R > 0.0 && println("Denoise Radius $R")
+        R > 0 && (y1, _ = denoise(y0; factor=R))
+        return y1
+    end
+
+    reg = Regularization(active=true, iter_reg=1, fun=regf)
+
+    while flag && i_try < max_tries
+        adesign_tmp = adesign
+        if ss> 0.0 
+            adesign_tmp = perturb_DesignParameter(adesign, i, ss)
+        end
+
+        adesign_r = regularize_airfoil(adesign_tmp, 1, reg)
+        modelname = create_msh(meshinfo, adesign_r, physicalp, folder; iter=i)
+        
+        try
+            model = GmshDiscreteModel(modelname)
+        catch
+            i_try += 1
+            R += 0.01
+            println("Mesh gen $(i_try)")
+        else
+            flag = false
+        end
+    end
+
+    return model
+end
 
 
 function eval_f(w::Vector, cache::SharedCache)
@@ -118,12 +156,9 @@ function eval_f(w::Vector, cache::SharedCache)
 
     #create the new airfoil model from the weights w
     adesign = create_AirfoilDesign(adesign,w)
-    
     adesign = regularize_airfoil(adesign, iter, regularization) #design regularization
+    model = generate_regularized_model(adesign, iter, 0.0, meshinfo, physicalp, "MeshFiles")
     
-    modelname =create_msh(meshinfo,adesign, physicalp ; iter = iter)
-    model = GmshDiscreteModel(modelname)
-
     writevtk(model, "model_$iter")
     am =  AirfoilModel(model, vbcase)
 
@@ -142,25 +177,23 @@ function eval_f(w::Vector, cache::SharedCache)
 
 
     
-    fval, CDCL = obj_fun(am, vbcase, uh,ph,thick_penalty, J)
+    fval, CDCL = obj_fun(am, vbcase, uh,ph, thick_penalty, J)
     #### Adjoint Boundary Conditions
     #use the CLCD value to set the Boundary Condition
     adj_bc = -dJobj_fun(J, CDCL)
     
 
-    return fval, iter, uh, ph, adj_bc, am, PressureCoefficient, CDCL
+    return fval, iter, uh, ph, adj_bc, am, PressureCoefficient, CDCL, adesign
 end
 
 
 function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
-    @unpack  iter, uh, ph, adjp, am, adj_bc, CDCL= cache
-    @unpack J,adesign, vbcase, timesol,solver = adjp
+    @unpack  iter, uh, ph, adjp, am, adj_bc, CDCL, adesign= cache #take the updated adesign
+    @unpack J, vbcase, timesol,solver = adjp
     @unpack thick_penalty = solver
     
     airfoil_case= vbcase
-    adesign = create_AirfoilDesign(adesign,w)
-
-
+    
     uhadj,phadj = solve_inc_adj(am, airfoil_case, adj_bc, "inc-adj-"*string( timesol[2]) *"-$iter", timesol[2], uh, ph)
 
     Ndes = length(w) #number of design parameters
@@ -186,6 +219,7 @@ function eval_∇f!(grad::Vector, w::Vector,  cache::SharedCache)
 end
 
 
+
 function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel, airfoil_case::Airfoil, solver::AdjSolver, uh,uhadj )
     Ndes = length(shift)
     @unpack thick_penalty,regularization = solver
@@ -197,9 +231,7 @@ function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am
     for (i,ss) in enumerate(shift)
         @info "Perturbation Domain $i"
 
-        adesign_tmp = perturb_DesignParameter(adesign, i, ss)
-        modelname_tmp =create_msh(meshinfo,adesign_tmp, physicalp,"MeshPerturb"; iter = i+100)
-        model_tmp = GmshDiscreteModel(modelname_tmp)
+        model_tmp = generate_regularized_model(adesign, i, ss, meshinfo, physicalp, "MeshPerturb")
         am_tmp =  AirfoilModel(model_tmp, airfoil_case)
 
         Ji[i],Jthickness[i] = compute_sensitivity(am, am_tmp,adesign, i,ss, airfoil_case,thick_penalty, uh,uhadj) 

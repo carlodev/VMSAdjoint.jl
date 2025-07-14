@@ -97,7 +97,7 @@ end
 function compute_gradient(uh, uhadj, ν, tΓ, nΓ,dΓ, am0,am1,  δ, thick_penalty, v_field_corr )
     J_sens = -2 .*    sum(-ν* ∫( ((∇(uh) ⋅ tΓ) ⋅ nΓ) * ((∇(uhadj) ⋅ tΓ) ⋅ nΓ) ⋅ v_field_corr)dΓ)
     #ThickPenalty Gradient
-    Jp = compute_∇thickness_penalty(am0,am1,  δ, thick_penalty)
+    Jp = compute_∇penalty(am0,am1,  δ, thick_penalty)
 return  J_sens,Jp
 end
 
@@ -106,15 +106,18 @@ end
 
 
 
-function compute_∇thickness_penalty(am0::AirfoilModel,am1::AirfoilModel,  δ::Float64, thick_penalty::ThickPenalty)
-    @unpack tmin, α, valid = thick_penalty
-    if valid 
-        tp0 = thickness_penalty(am0, tmin, α)
-        tp1 = thickness_penalty(am1, tmin, α)
-        return (tp1 - tp0)/δ
-    else
-        return 0.0
-    end
+function compute_∇penalty(am0::AirfoilModel,am1::AirfoilModel,  δ::Float64, thick_penalty::ThickPenalty)
+    @unpack thickness_penalty, valid = thick_penalty
 
+    interpolated_points0 = interpolate_points_x(am0)
+    interpolated_points1 = interpolate_points_x(am1)
+
+    penalty0 = (valid) ? thickness_penalty(interpolated_points0 ) : 0.0
+    penalty1 = (valid) ? thickness_penalty(interpolated_points1 ) : 0.0
+
+    ∇penalty = (penalty1 - penalty0)/δ
+   
+    return ∇penalty
+   
     
 end

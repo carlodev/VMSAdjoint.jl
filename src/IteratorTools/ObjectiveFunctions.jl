@@ -45,7 +45,7 @@ It gives fitnessvalue, [CD,CL]
 function obj_fun(am::AirfoilModel, vbcase::Airfoil, uh, ph, thick_penalty::ThickPenalty, fun::Function)
     @sunpack order = vbcase
     @unpack model, params = am
-    @unpack tmin, α, valid = thick_penalty
+    @unpack thickness_penalty, valid = thick_penalty
 
 
     Γ = BoundaryTriangulation(model; tags="airfoil")
@@ -55,7 +55,8 @@ function obj_fun(am::AirfoilModel, vbcase::Airfoil, uh, ph, thick_penalty::Thick
     physicalp = vbcase.simulationp.physicalp
     CD, CL = compute_airfoil_coefficients(uh, ph, nΓ, dΓ, physicalp)
 
-    thick_pen = (valid) ? thickness_penalty(am, tmin,α ) : 0.0
+    interpolated_points = interpolate_points_x(am)
+    thick_pen = (valid) ? thickness_penalty(interpolated_points ) : 0.0
     fitnessval = fun([CD, CL])
 
     println("----------")
@@ -66,8 +67,7 @@ function obj_fun(am::AirfoilModel, vbcase::Airfoil, uh, ph, thick_penalty::Thick
     return fitnessval + thick_pen, [CD, CL]
 end
 
-function thickness_penalty(am::AirfoilModel, tmin::Float64, α::Real)
-    @assert α>0.0 "α has to be positive, α = $α not valid"
+function interpolate_points_x(am::AirfoilModel)
     
     leading_edge_cutoff = 0.01
     trailing_edge_cutoff = 0.01
@@ -104,25 +104,7 @@ function thickness_penalty(am::AirfoilModel, tmin::Float64, α::Real)
     # Interpolate surfaces
     yu = linear_interpolation(xu_filtered, yu_filtered).(xx)
     yl = linear_interpolation(xl_filtered, yl_filtered).(xx)
-
-    # Calculate thickness
-    Δy = yu - yl
-
-    # Check for minimum thickness violations
-    thickness_violations = tmin .- Δy
-    violations_locations = findall(thickness_violations.>0)
-    !isempty(violations_locations) && println("Violations Locations x= $(xx[violations_locations])")
-    
-    #Σviolations^2
-    penalty = sum((violation > 0) ? violation^2 : 0.0 for violation in thickness_violations)
-
-
-    if isnan(penalty) || isinf(penalty)
-        @error "Invalid penalty value detected. Check airfoil coordinates."
-        return α   # Return a large penalty for invalid configurations
-    end
-
-    return penalty * α
+    return (xx, yu, yl)
 end
 
 """

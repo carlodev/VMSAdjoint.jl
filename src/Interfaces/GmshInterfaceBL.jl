@@ -5,39 +5,27 @@ import Gmsh: gmsh
 function split_splines_points(airfoil_points::AirfoilPoints, AoA::Float64; pos=0.065, chord = 1.0)
          
     @unpack xu,xl,yu,yl = airfoil_points
+    xur,yur = zeros(length(xu)),zeros(length(xu))
 
-    threshold = pos * chord
-    top_LE_point = findmin(abs.(xu .- threshold))[2]
-    bottom_LE_point = findmin(abs.(xl .- threshold))[2]
-   
-
-    Mtop = rotate_points([xu[1:top_LE_point],yu[1:top_LE_point]], AoA)
-
-    Mbottom = rotate_points([xl[bottom_LE_point:end],yl[bottom_LE_point:end]], AoA)
-    
-    Mle = rotate_points([ [xu[top_LE_point+1:end];xl[1:bottom_LE_point-1]],
-    [yu[top_LE_point+1:end];yl[1:bottom_LE_point-1]]  ], AoA)
-
-     return  reverse.(Mtop), Mbottom, reverse.(Mle)
-end
-
-
-function rotate_points(Mpoints::Vector{Vector{Float64}}, AoA::Float64)
-    xr = Float64[]
-    yr = Float64[]
-    for (x,y) in zip(Mpoints...)
-        xrt= x * cosd(AoA) + y*sind(AoA)
-        yrt = -1*x * sind(AoA) + y *cosd(AoA)
-        push!(xr,xrt)
-        push!(yr,yrt)
+    for (i,(x,y)) in enumerate(zip(xu,yu))
+        xur[i],yur[i] = rotate_points([x,y], AoA)
     end
-    return [xr,yr]
+
+    xlr,ylr = zeros(length(xl)),zeros(length(xl))
+    for (i,(x,y)) in enumerate(zip(xl,yl))
+        xlr[i],ylr[i] = rotate_points([x,y], AoA)
+    end
+
+    X = vcat(xur, xlr)
+    Y =  vcat(yur, ylr)
+
+     return X,Y
 end
+
 
 function rotate_points(v::Vector{Float64}, AoA::Float64)
-    x = v[1] 
-    y = v[2]
-    
+    x,y = v
+
     xrt= x * cosd(AoA) + y*sind(AoA)
     yrt = -1*x * sind(AoA) + y *cosd(AoA)
 
@@ -73,6 +61,7 @@ function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign; iter = 0, ch
 
     gmsh.initialize()
     
+    rpoint = 0.005
     gmsh.model.add("Model1")
     Lback = Lback*chord
     H= H*chord
@@ -81,51 +70,29 @@ function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign; iter = 0, ch
     gmsh.model.geo.addPoint(Lback, H, 0)
     
     gmsh.model.geo.addPoint(0.0, -H, 0)
-    # gmsh.model.geo.addPoint(chord + slant , -H, 0)
-    
-    # pback = rotate_points([Lback,0.0], AoA)
-    # gmsh.model.geo.addPoint(Lback, pback[2], 0)
+
 
     
-    # gmsh.model.geo.addPoint(chord + slant, H, 0)
     gmsh.model.geo.addPoint(0.0, H, 0)
+        
     
-    # gmsh.model.geo.addPoint(Lfront, 0.0, 0)
-    
-    
-    top_points = Int32[]
-    bottom_points = Int32[]
-    leading_edge_points = Int32[]
-    leading_edge_points_coordinates = Vector[]
+    airfoil_gmsh_points = Int32[]
 
 
-    Mtop, Mbottom, Mle = split_splines_points(airfoil_points, AoA)
+
+    X,Y = split_splines_points(airfoil_points, AoA)
     
     
 
-    for (xp,yp) in zip(Mtop...)
-            idx = gmsh.model.geo.addPoint(xp, yp, 0)
-            push!(top_points,idx)
+    for (xp,yp) in zip(X,Y)
+            idx = gmsh.model.geo.addPoint(xp, yp, 0, rpoint)
+            push!(airfoil_gmsh_points,idx)
     end
     
-    for  (xp,yp) in zip(Mbottom...)
-            idx = gmsh.model.geo.addPoint(xp, yp, 0)
-            push!(bottom_points,idx)
-    end
-    
-    for  (xp,yp) in zip(Mle...)
-        idx = gmsh.model.geo.addPoint(xp, yp, 0)
-        push!(leading_edge_points,idx)
-        push!(leading_edge_points_coordinates, [xp,yp])
-    end
     
     trailing_coordinate =rotate_points([1.0,0.0],AoA)
+    trailing = gmsh.model.geo.addPoint(trailing_coordinate[1],trailing_coordinate[2], 0, rpoint)
 
-    trailing = gmsh.model.geo.addPoint(trailing_coordinate[1],trailing_coordinate[2], 0)
-
-
-    top_le_point = leading_edge_points[end]
-    bottom_le_point = leading_edge_points[1]
 
 
 
@@ -151,29 +118,28 @@ function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign; iter = 0, ch
 
     #Airfoil Splines
    
-    airfoil_line = zeros(3)
-    airfoil_line[1] =  gmsh.model.geo.addLine(trailing,top_points[end])
-    airfoil_line[2] = gmsh.model.geo.addSpline(vcat(reverse([top_le_point, top_points...]),reverse(leading_edge_points), [bottom_le_point,bottom_points...] ) )
-    airfoil_line[3] =  gmsh.model.geo.addLine(bottom_points[end],trailing)
-    
+    airfoil_line = zeros(Int32,3)
+    airfoil_line[1] = gmsh.model.geo.addSpline(airfoil_gmsh_points )
+    airfoil_line[2] =  gmsh.model.geo.addLine(airfoil_gmsh_points[end],trailing)
+    airfoil_line[3] =  gmsh.model.geo.addLine(trailing,airfoil_gmsh_points[1])
+
     # #Curve Loops
     gmsh.model.geo.addCurveLoop([- limits_lines[1],outlet_lines[1],  limits_lines[2], -inlet_lines[1]   ])
 
-
-    gmsh.model.geo.addCurveLoop([airfoil_line...])
+    gmsh.model.geo.addCurveLoop(airfoil_line)
 
     gmsh.model.geo.addPlaneSurface([1,2])
     
-    gmsh.model.geo.mesh.setTransfiniteCurve( limits_lines[2], 20, "Progression", 1.0)
-    gmsh.model.geo.mesh.setTransfiniteCurve(-limits_lines[1], 20, "Progression", 1.0)
+    # gmsh.model.geo.mesh.setTransfiniteCurve( limits_lines[2], 20, "Progression", 1.0)
+    # gmsh.model.geo.mesh.setTransfiniteCurve(-limits_lines[1], 20, "Progression", 1.0)
 
-    gmsh.model.geo.mesh.setTransfiniteCurve(outlet_lines[1], 20, "Progression", 1.0)
-    gmsh.model.geo.mesh.setTransfiniteCurve(-inlet_lines[1]  , 40, "Progression", 1.0)
+    # gmsh.model.geo.mesh.setTransfiniteCurve(outlet_lines[1], 20, "Progression", 1.0)
+    # gmsh.model.geo.mesh.setTransfiniteCurve(-inlet_lines[1]  , 40, "Progression", 1.0)
   
       
-    gmsh.model.geo.mesh.setTransfiniteCurve(airfoil_line[2]  , 403, "Bump", 1.2)
-    gmsh.model.geo.mesh.setTransfiniteCurve(airfoil_line[1]  , 2, "Progression", 1.0)
-    gmsh.model.geo.mesh.setTransfiniteCurve(airfoil_line[3]  , 2, "Progression", 1.0)
+    # gmsh.model.geo.mesh.setTransfiniteCurve(airfoil_line[1]  , 403, "Bump", 1.2)
+    # gmsh.model.geo.mesh.setTransfiniteCurve(airfoil_line[2]  , 2, "Progression", 1.0)
+    # gmsh.model.geo.mesh.setTransfiniteCurve(airfoil_line[3]  , 2, "Progression", 1.0)
 
     
     gmsh.model.mesh.field.add("BoundaryLayer", 1)
@@ -182,7 +148,12 @@ function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign; iter = 0, ch
     gmsh.model.mesh.field.setNumber(1, "SizeFar", 0.01) 
     gmsh.model.mesh.field.setNumber(1, "Thickness", BL_tt)    # total thickness
     gmsh.model.mesh.field.setNumber(1, "Ratio", 1.12)          # growth rate
-    gmsh.model.mesh.field.setNumber(1, "Quads", 1)         
+    gmsh.model.mesh.field.setNumber(1, "Quads", 1)  
+    
+    # gmsh.model.mesh.field.setNumbers(1, "FanPointsList", [trailing])
+    # gmsh.option.setNumber("Mesh.BoundaryLayerFanElements", 11)
+
+    
     gmsh.model.mesh.field.setAsBoundaryLayer(1)
 
 
@@ -206,26 +177,23 @@ function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign; iter = 0, ch
 
 
     gmsh.model.geo.synchronize()
+
+
     gmsh.option.setNumber("Mesh.RecombineAll", 1)
 
-    gmsh.option.setNumber("Mesh.SubdivisionAlgorithm", 1)  # or 0, depending on surface shape
+    # gmsh.option.setNumber("Mesh.SubdivisionAlgorithm", 1)  # or 0, depending on surface shape
 
     
     #Points
     
-    gmsh.model.addPhysicalGroup(0, [trailing,top_points[end],bottom_points[end]], -1, "airfoil")
-    
-    gmsh.model.addPhysicalGroup(0, [trailing], -1, "trailing")
-    
-
-
+    gmsh.model.addPhysicalGroup(0, [airfoil_gmsh_points[end],airfoil_gmsh_points[1],trailing], -1, "airfoil")
     gmsh.model.addPhysicalGroup(0, [1,2,3,4],-1,"limits")
     
     #Lines
-    gmsh.model.addPhysicalGroup(1, [airfoil_line...],-1, "airfoil")
-    gmsh.model.addPhysicalGroup(1, [limits_lines...],-1, "limits")
-    gmsh.model.addPhysicalGroup(1, [outlet_lines...],-1, "outlet")
-    gmsh.model.addPhysicalGroup(1, [inlet_lines...],-1, "inlet")
+    gmsh.model.addPhysicalGroup(1, airfoil_line,-1, "airfoil")
+    gmsh.model.addPhysicalGroup(1, limits_lines,-1, "limits")
+    gmsh.model.addPhysicalGroup(1, outlet_lines,-1, "outlet")
+    gmsh.model.addPhysicalGroup(1, inlet_lines,-1, "inlet")
    
 
     # #Surfaces

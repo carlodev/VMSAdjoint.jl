@@ -7,6 +7,7 @@ function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem; idx
     @unpack thick_penalty = solver
     @sunpack order = vbcase
 
+    tsol = timesol[1]
 
     fddir = "FD"
     mkpath(fddir)
@@ -32,18 +33,21 @@ function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem; idx
     
     #create the new airfoil model from the weights w
     adesign = create_AirfoilDesign(adesign,w)
-    modelname =create_msh(meshinfo,adesign, physicalp ; iter = 0)
-    model = GmshDiscreteModel(modelname)
-    writevtk(model, joinpath(fddir,"model_FD_0"))
-    am =  AirfoilModel(model, airfoil_case; am=nothing)
 
+    model = generate_regularized_model(adesign, 0, 0.0, meshinfo, physicalp, "MeshFiles")
+
+     #modelname = create_msh(meshinfo,adesign, physicalp ; iter = 0)
+     #model = GmshDiscreteModel(modelname)
+     
+    writevtk(model, joinpath(fddir,"model_FD_0"))
+    am =  AirfoilModel(model, airfoil_case)
     filename = joinpath(fddir, "FD_0")
 
    
 
-    uh0,ph0 = solve_inc_primal(am, airfoil_case, filename, timesol)    
+    uh0,ph0 = solve_inc_primal(am, airfoil_case, filename, tsol)    
     fval0, CLCD0 = obj_fun(am, airfoil_case, uh0,ph0,thick_penalty, J)
-    fval_fd, CLCD_fd = iterate_fd(shiftv,idxs, adesign,am,airfoil_case,timesol,thick_penalty, J )
+    fval_fd, CLCD_fd = iterate_fd(shiftv,idxs, adesign,airfoil_case,tsol,thick_penalty, J )
 
     fval_grad = (fval_fd .- fval0)./shiftv
     CLCD_grad= map(CLCDi-> CLCDi .- CLCD0, CLCD_fd) ./shiftv
@@ -56,7 +60,7 @@ function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem; idx
 
 end
 
-function iterate_fd(shift::Vector{Float64}, idxs::Vector{Int64}, adesign::AirfoilDesign,am::AirfoilModel,airfoil_case::Airfoil,timesol::Symbol,thick_penalty, J::Function  )
+function iterate_fd(shift::Vector{Float64}, idxs::Vector{Int64}, adesign::AirfoilDesign,airfoil_case::Airfoil,tsol::Symbol,thick_penalty, J::Function  )
     fddir = "FD"
     mkpath(fddir)
 
@@ -77,16 +81,14 @@ function iterate_fd(shift::Vector{Float64}, idxs::Vector{Int64}, adesign::Airfoi
 
         println("Perturbation Domain $i")
 
-        adesign_tmp = perturb_DesignParameter(adesign, i, ss)
+        model_tmp = generate_regularized_model(adesign, i, ss, meshinfo, physicalp, "MeshPerturb")
 
-        modelname_tmp =create_msh(meshinfo,adesign_tmp, physicalp,"MeshPerturb"; iter = i+100)
-        model_tmp = GmshDiscreteModel(modelname_tmp)
-        am_tmp =  AirfoilModel(model_tmp, airfoil_case, am=am)
+        am_tmp =  AirfoilModel(model_tmp, airfoil_case)
 
         filename = joinpath(fddir, "FD_$(i)")
 
         
-        uh_tmp,ph_tmp = solve_inc_primal(am_tmp, airfoil_case, filename, timesol; uh0=nothing,ph0=nothing)    
+        uh_tmp,ph_tmp = solve_inc_primal(am_tmp, airfoil_case, filename, tsol; uh0=nothing,ph0=nothing)    
 
         fval_fd[i], CLCD_fd[i] = obj_fun(am_tmp, airfoil_case, uh_tmp,ph_tmp,thick_penalty, J)
 
