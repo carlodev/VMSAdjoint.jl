@@ -2,6 +2,7 @@
 
 function solve_adjoint_optimization(adjp::AdjointProblem)
     @unpack solver = adjp
+    @unpack ls, step_options = solver
 
     #create initial
     w_init = get_DesignParameters(adjp.adesign)
@@ -16,9 +17,9 @@ function solve_adjoint_optimization(adjp::AdjointProblem)
 
     opt_options = Optim.Options(iterations = solver.max_iter)  # change  to your desired limit
 
-    ls = LineSearches.Static()
-    step_options = LineSearches.InitialStatic(alpha=solver.αg, scaled=solver.scaled)
+
     # L-BFGS optimizer with line search control
+    #ls and step-options defined in the solver
     result = optimize(f, ∇f!,lb,ub, w_init, Fminbox(LBFGS(alphaguess=step_options, linesearch=ls)),opt_options)
     
     return true
@@ -27,6 +28,7 @@ end
 
 
 #Boundary conditions on design parameters
+
 function bounds_w(adesign::RBFDesign, Ndes::Int64,bounds::DesignBounds )
     @unpack upper, lower, Δy = bounds
     Nhalf = Int(Ndes ÷ 2)

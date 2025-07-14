@@ -110,12 +110,12 @@ Settings for the adjoint solver
 @with_kw struct AdjSolver
     max_iter::Int64 = 10 #maximum number of adjoint iterations
     tol::Float64 = 2.5e-2 #tolerance convergence
-    αg::Float64 = 2.0 #alphaguess, reduce if the geometry is chaning too fast
     δ::Float64=0.0001 #Perturbation of the design parameters for finite differences
     bounds::DesignBounds = DesignBounds()
-    scaled::Bool = false
     thick_penalty::ThickPenalty=ThickPenalty()
     regularization::Regularization=Regularization()
+    ls = LineSearches.Static() #LineSearch
+    step_options = LineSearches.InitialStatic(alpha=1.0, scaled=false)
 end
 
 @with_kw struct MeshSize

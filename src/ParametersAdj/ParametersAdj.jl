@@ -9,6 +9,8 @@ using Parameters
 using Gridap
 using SegregatedVMSSolver.ParametersDef
 using AirfoilTools
+using Optim
+using LineSearches
 
 export thickness_penalty_default
 
