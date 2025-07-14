@@ -2,7 +2,7 @@
 
 function solve_adjoint_optimization(adjp::AdjointProblem)
     @unpack solver = adjp
-    @unpack ls, step_options = solver
+    @unpack ls, step_options,opt_options = solver
 
     #create initial
     w_init = get_DesignParameters(adjp.adesign)
@@ -14,8 +14,6 @@ function solve_adjoint_optimization(adjp::AdjointProblem)
     @info "Number of Design parameters: $Ndes"
     f, ∇f! = make_f_and_∇f(adjp, Ndes)
 
-
-    opt_options = Optim.Options(iterations = solver.max_iter)  # change  to your desired limit
 
 
     # L-BFGS optimizer with line search control
