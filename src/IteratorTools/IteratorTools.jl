@@ -27,6 +27,7 @@ export thickness_penalty
 include("ObjectiveFunctions.jl")
 
 export regularize_airfoil
+export generate_regularized_model
 include("RegularizationTools.jl")
 
 export compute_sensitivity
