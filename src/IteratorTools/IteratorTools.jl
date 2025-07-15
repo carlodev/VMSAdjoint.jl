@@ -12,8 +12,8 @@ using VMSAdjoint.Interfaces
 using VMSAdjoint.IncompressibleSolvers
 using VMSAdjoint.IncompressibleSolvers: create_primal_spaces,create_adjoint_spaces,solve_inc_primal_steady
 using JLD2
-# using NLopt
-using Optim
+using NLopt
+# using Optim
 using LineSearches
 using KissSmoothing
 
@@ -34,7 +34,7 @@ export compute_sensitivity
 include("Sensitivity.jl")
 
 export solve_adjoint_optimization
-include("OptLoop.jl")
+include("NLOptLoop.jl")
 
 export finite_difference_analysis
 include("FDTools.jl")

@@ -105,44 +105,13 @@ end
 """
     AdjSolver
 
-Settings for the adjoint solver.
-
-    Configurable options for opt_options
- x_abstol::Real = 0.0,
-  x_reltol::Real = 0.0,
-  f_abstol::Real = 0.0,
-  f_reltol::Real = 0.0,
-  g_abstol::Real = 1e-8,
-  outer_x_abstol::Real = 0.0,
-  outer_x_reltol::Real = 0.0,
-  outer_f_abstol::Real = 0.0,
-  outer_f_reltol::Real = 0.0,
-  outer_g_abstol::Real = 1e-8,
-  f_calls_limit::Int = 0,
-  g_calls_limit::Int = 0,
-  h_calls_limit::Int = 0,
-  allow_f_increases::Bool = true,
-  allow_outer_f_increases::Bool = true,
-  successive_f_tol::Int = 1,
-  iterations::Int = 1_000,
-  outer_iterations::Int = 1000,
-  store_trace::Bool = false,
-  show_trace::Bool = false,
-  extended_trace::Bool = false,
-  show_warnings::Bool = true,
-  show_every::Int = 1,
-  callback = nothing,
-  time_limit = NaN
-
 """
 @with_kw struct AdjSolver
     δ::Float64=0.0001 #Perturbation of the design parameters for finite differences
     bounds::DesignBounds = DesignBounds()
     thick_penalty::ThickPenalty=ThickPenalty()
     regularization::Regularization=Regularization()
-    ls = LineSearches.Static() #LineSearch
-    step_options = LineSearches.InitialStatic(alpha=1.0, scaled=false)
-    opt_options = Optim.Options()  # change  to your desired limit
+    opt_alg::Symbol = :LD_LBFGS
 end
 
 @with_kw struct MeshSize
