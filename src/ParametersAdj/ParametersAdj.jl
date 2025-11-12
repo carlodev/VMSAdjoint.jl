@@ -25,6 +25,10 @@ export Regularization
 export AdjSolver
 export AdjointProblem
 export AdjSolution
+export MeshStructure
+
+export Structured
+export Unstructured
 
 include("ParamsCore.jl")
 

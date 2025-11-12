@@ -1,62 +1,32 @@
 
-using Gmsh
-import Gmsh: gmsh
 
-function split_splines_points(airfoil_points::AirfoilPoints, AoA::Float64; pos=0.065, chord = 1.0)
+
+function create_unstructured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign, iter::Int64, chord::Real, folder::String)
+
+    function split_splines_points(airfoil_points::AirfoilPoints, AoA::Float64; pos=0.065, chord = 1.0)
          
-    @unpack xu,xl,yu,yl = airfoil_points
-    xur,yur = zeros(length(xu)),zeros(length(xu))
-
-    for (i,(x,y)) in enumerate(zip(xu,yu))
-        xur[i],yur[i] = rotate_points([x,y], AoA)
-    end
-
-    xlr,ylr = zeros(length(xl)),zeros(length(xl))
-    for (i,(x,y)) in enumerate(zip(xl,yl))
-        xlr[i],ylr[i] = rotate_points([x,y], AoA)
-    end
-
-    X = vcat(xur, xlr)
-    Y =  vcat(yur, ylr)
-
-     return X,Y
-end
-
-
-function rotate_points(v::Vector{Float64}, AoA::Float64)
-    x,y = v
-
-    xrt= x * cosd(AoA) + y*sind(AoA)
-    yrt = -1*x * sind(AoA) + y *cosd(AoA)
-
-    return xrt,yrt
-end
-
-function find_origin_idx(leading_edge_points::Vector)
-    _,idx = findmin(norm.(leading_edge_points))
-    return idx
-end
-
-function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,  pp::PhysicalParameters ; iter::Int64= 0)
-    @unpack folder = am
-    return create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,; iter=iter, chord = pp.c, folder = folder)
-end
-
-
-
-function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,  pp::PhysicalParameters, folder::String; iter::Int64= 0 , )
-    return create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,; iter=iter, chord = pp.c, folder = folder)
-end
-
-"""
-    create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0, mesh_ref=1.0)
-
-From a set of `airfoil_points` it creates the .msh file. Incresing `mesh_ref` is increasing the mesh density.
-"""
-function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign; iter = 0, chord= 1.0, folder="MeshFiles")
+        @unpack xu,xl,yu,yl = airfoil_points
+        xur,yur = zeros(length(xu)),zeros(length(xu))
     
+        for (i,(x,y)) in enumerate(zip(xu,yu))
+            xur[i],yur[i] = rotate_points([x,y], AoA)
+        end
+    
+        xlr,ylr = zeros(length(xl)),zeros(length(xl))
+        for (i,(x,y)) in enumerate(zip(xl,yl))
+            xlr[i],ylr[i] = rotate_points([x,y], AoA)
+        end
+    
+        X = vcat(xur, xlr)
+        Y =  vcat(yur, ylr)
+    
+         return X,Y
+    end
+
+    
+
     airfoil_points = airfoil_design.ap
-    @unpack  Lback, H, meshref,BL_fl,BL_tt = am.MS
+    @unpack  Lback, H, meshref,BL_fl,BL_tt, airfoil_divisions = am.MS
     @unpack AoA = am
 
     gmsh.initialize()

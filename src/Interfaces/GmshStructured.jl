@@ -1,75 +1,37 @@
 
-using Gmsh
-import Gmsh: gmsh
 
-function split_splines_points(airfoil_points::AirfoilPoints, AoA::Float64; pos=0.065, chord = 1.0)
-         
-    @unpack xu,xl,yu,yl = airfoil_points
 
-    threshold = pos * chord
-    top_LE_point = findmin(abs.(xu .- threshold))[2]
-    bottom_LE_point = findmin(abs.(xl .- threshold))[2]
-   
+function create_structured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign, iter::Int64, chord::Real, folder::String)
 
-    Mtop = rotate_points([xu[1:top_LE_point],yu[1:top_LE_point]], AoA)
-
-    Mbottom = rotate_points([xl[bottom_LE_point:end],yl[bottom_LE_point:end]], AoA)
     
-    Mle = rotate_points([ [xu[top_LE_point+1:end];xl[1:bottom_LE_point-1]],
-    [yu[top_LE_point+1:end];yl[1:bottom_LE_point-1]]  ], AoA)
+    function split_splines_points(airfoil_points::AirfoilPoints, AoA::Float64; pos=0.065, chord = 1.0)
+            
+        @unpack xu,xl,yu,yl = airfoil_points
 
-     return  reverse.(Mtop), Mbottom, reverse.(Mle)
-end
+        threshold = pos * chord
+        top_LE_point = findmin(abs.(xu .- threshold))[2]
+        bottom_LE_point = findmin(abs.(xl .- threshold))[2]
+    
 
+        Mtop = rotate_points([xu[1:top_LE_point],yu[1:top_LE_point]], AoA)
 
-function rotate_points(Mpoints::Vector{Vector{Float64}}, AoA::Float64)
-    xr = Float64[]
-    yr = Float64[]
-    for (x,y) in zip(Mpoints...)
-        xrt= x * cosd(AoA) + y*sind(AoA)
-        yrt = -1*x * sind(AoA) + y *cosd(AoA)
-        push!(xr,xrt)
-        push!(yr,yrt)
+        Mbottom = rotate_points([xl[bottom_LE_point:end],yl[bottom_LE_point:end]], AoA)
+        
+        Mle = rotate_points([ [xu[top_LE_point+1:end];xl[1:bottom_LE_point-1]],
+        [yu[top_LE_point+1:end];yl[1:bottom_LE_point-1]]  ], AoA)
+
+        return  reverse.(Mtop), Mbottom, reverse.(Mle)
     end
-    return [xr,yr]
-end
-
-function rotate_points(v::Vector{Float64}, AoA::Float64)
-    x = v[1] 
-    y = v[2]
-    
-    xrt= x * cosd(AoA) + y*sind(AoA)
-    yrt = -1*x * sind(AoA) + y *cosd(AoA)
-
-    return xrt,yrt
-end
-
-function find_origin_idx(leading_edge_points::Vector)
-    _,idx = findmin(norm.(leading_edge_points))
-    return idx
-end
-
-function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,  pp::PhysicalParameters ; iter::Int64= 0)
-    @unpack AoA, meshref, folder, H, Lback = am
-    @unpack ap = airfoil_design
-    return create_msh(ap;H=H, Lback =Lback, AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
-end
 
 
 
-function create_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,  pp::PhysicalParameters, folder::String; iter::Int64= 0 , )
-    @unpack AoA, meshref,H, Lback = am
-    @unpack ap = airfoil_design
-    return create_msh(ap; H=H, Lback =Lback, AoA=AoA, iter=iter, chord = pp.c, mesh_ref = meshref, folder = folder)
-end
+    airfoil_points = airfoil_design.ap
+    @assert chord>0 "chord value not valid, enter a positive value"
+    @unpack  Lback, H, meshref,airfoil_divisions = am.MS
+    @unpack AoA = am
 
-"""
-    create_msh(airfoil_points::AirfoilPoints; AoA=0.0, iter = 0, chord= 1.0, mesh_ref=1.0)
-
-From a set of `airfoil_points` it creates the .msh file. Incresing `mesh_ref` is increasing the mesh density.
-"""
-function create_msh(airfoil_points::AirfoilPoints; H=8.0, Lback =8.0, AoA=0.0, iter = 0, chord= 1.0, mesh_ref=1.0, folder="MeshFiles")
-
+    mesh_ref = meshref #rename variable
+    #airfoil_divisions - > used only in the unstructured
 
     gmsh.initialize()
     

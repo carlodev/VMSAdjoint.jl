@@ -1,3 +1,7 @@
+abstract type MeshStructure end
+struct Structured   <: MeshStructure end
+struct Unstructured <: MeshStructure end
+
 
 """
     AirfoilNormals(nu,nl)
@@ -123,11 +127,14 @@ end
     Lback::Real = 8
 end
 
-@with_kw struct AirfoilMesh <:MeshInfo
+@with_kw struct AirfoilMesh{S<:MeshStructure} <:MeshInfo
     AoA::Real #Angle of Attack - degrees
     folder::String="MeshFiles"
     MS::MeshSize = MeshSize()
 end
+
+# AirfoilMesh(; kwargs...) = AirfoilMesh{Structured}(; kwargs...) #Default Constructor for AirfoilMesh
+
 
 struct AdjointProblem
     adesign::AirfoilDesign
