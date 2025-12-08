@@ -11,6 +11,8 @@ function solve_adjoint_optimization(adjp::AdjointProblem)
     Ndes = length(w_init)
     lb,ub = bounds_w(adjp.adesign, Ndes, solver.bounds)
 
+    [@assert ub1 >= w1 >= lb1 "Parameter number:$(i) not valid: $(ub1) $(w1) $(lb1) not in-bound" for (i,(ub1,w1,lb1)) in enumerate(zip(ub,w_init,lb)) ]
+
     @info "Number of Design parameters: $Ndes"
     opt = NLopt.Opt(opt_alg, Ndes)
     NLopt.lower_bounds!(opt, lb)
@@ -104,15 +106,13 @@ function f_and_∇f(w::Vector{Float64}, grad::Vector{Float64}, cache::SharedCach
     if timesol==:steady
         filename = joinpath("Results_primal", "SOL_$(iter).vtu")
     else
-           filename = "sol_$(iter)"
+        filename = "sol_$(iter)"
     end
 
     uh,ph = solve_inc_primal(am, vbcase, filename, timesol[1]; uh0=nothing,ph0=nothing)    
  
     #### extract results from primal solution: Cp (and Cf)
     PressureCoefficient = get_aerodynamic_features(am,uh,ph)
-
-
     
     fval, CDCL = obj_fun(am, vbcase, uh,ph, thick_penalty, J)
     #### Adjoint Boundary Conditions
