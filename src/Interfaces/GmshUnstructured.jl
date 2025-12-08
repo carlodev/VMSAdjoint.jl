@@ -94,12 +94,17 @@ function create_unstructured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,
     airfoil_line[3] =  gmsh.model.geo.addLine(trailing,airfoil_gmsh_points[1])
 
     # #Curve Loops
-    gmsh.model.geo.addCurveLoop([- limits_lines[1],outlet_lines[1],  limits_lines[2], -inlet_lines[1]   ])
-
-    gmsh.model.geo.addCurveLoop(airfoil_line)
-
-    gmsh.model.geo.addPlaneSurface([1,2])
+    outerLoop = gmsh.model.geo.addCurveLoop([
+        -limits_lines[1],
+        outlet_lines[1],
+        limits_lines[2],
+        -inlet_lines[1],
+    ])
     
+    airfoilLoop = gmsh.model.geo.addCurveLoop(airfoil_line)
+    
+    gmsh.model.geo.addPlaneSurface([outerLoop,airfoilLoop ])
+
     # gmsh.model.geo.mesh.setTransfiniteCurve( limits_lines[2], 20, "Progression", 1.0)
     # gmsh.model.geo.mesh.setTransfiniteCurve(-limits_lines[1], 20, "Progression", 1.0)
 
@@ -151,6 +156,8 @@ function create_unstructured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,
 
     gmsh.option.setNumber("Mesh.RecombineAll", 1)
 
+    gmsh.model.geo.synchronize()
+
     # gmsh.option.setNumber("Mesh.SubdivisionAlgorithm", 1)  # or 0, depending on surface shape
 
     
@@ -171,9 +178,13 @@ function create_unstructured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,
     
     mkpath(folder)
 
+    gmsh.model.geo.synchronize()
+
     mesh_filename = joinpath(folder,"Mesh$iter.msh")
 
+    
     gmsh.model.mesh.generate(2)
+    
     gmsh.write(mesh_filename)
     gmsh.finalize()
     return mesh_filename
