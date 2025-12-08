@@ -26,22 +26,27 @@ end
 
 
 
-function generate_regularized_model(adesign::AirfoilDesign, i::Int64, ss::Float64, meshinfo, physicalp, folder::String; initial_R=0.0, max_tries=50)
+function generate_regularized_model(adesign::AirfoilDesign, i::Int64, ss::Float64, meshinfo, physicalp, folder::String; initial_L=0.0, max_tries=10)
     i_try = 0
     model = nothing
-    R = initial_R
+    L = initial_L
     flag = true
 
     function regf(x0, y0)
-        y1 = y0
-        R > 0.0 && println("Denoise Radius $R")
-        R > 0 && (y1, _ = denoise(y0; factor=R))
+        y1 = deepcopy(y0)
+        L > 0.0 && println("Denoise L $L")
+        # R > 0 && (y1, _ = denoise(y0; factor=R))
+        fn = fit_sine_series(x0,y0, 25,lambda = L) 
+        L > 0 && (y1 = fn.(x0) ) 
+        y1[1:2] = y0[1:2]
+        y1[end-1:end] = y0[end-1:end]
+
         return y1
     end
 
     reg = Regularization(active=true, iter_reg=1, fun=regf)
 
-    while flag && i_try < max_tries
+    while flag && i_try <= max_tries
         adesign_tmp = adesign
         if ss> 0.0 
             adesign_tmp = perturb_DesignParameter(adesign, i, ss)
@@ -52,12 +57,15 @@ function generate_regularized_model(adesign::AirfoilDesign, i::Int64, ss::Float6
         
         try
             model = GmshDiscreteModel(modelname)
+            flag = false
         catch
             i_try += 1
-            R += 0.01
+            L += 0.00001
             println("Mesh gen $(i_try)")
-        else
-            flag = false
+            if i_try==max_tries
+                @error "Impossible to generate a regularized model"
+            end
+
         end
     end
 
