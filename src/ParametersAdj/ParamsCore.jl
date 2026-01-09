@@ -122,7 +122,7 @@ end
     BL_fl::Float64 = 1e-4 #fist layer height
     BL_tt::Float64 = 0.02 #total thickness
     airfoil_divisions::Int64 = 301
-    meshref::Int64=1 #increase it, and it wil increase the resolution. Put = 0 and it will be very coarse, useful to debug
+    meshref::Real=1.0 #increase it, and it wil increase the resolution. Put = 0 and it will be very coarse, useful to debug
     H::Real = 8
     Lback::Real = 8
 end
