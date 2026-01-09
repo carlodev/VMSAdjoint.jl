@@ -38,8 +38,8 @@ function create_structured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign, i
     gmsh.model.add("Model1")
     Lback = Lback*chord
     H= H*chord
-    offset = 2.35
-    slant = 2.0
+    offset = 0.35
+    slant = 0.50
     
     gmsh.model.geo.addPoint(Lback, -H, 0)
     gmsh.model.geo.addPoint(Lback, H, 0)
@@ -173,43 +173,39 @@ function create_structured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign, i
     
     #vertical outer lines
     for i in [20,13,8,21,15,5]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, 40, "Progression", 1.02)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, 20, "Progression", 1.15)
     end
 
-    if mesh_ref ==0
-        corr = 0.1
-    else
-        corr = 1.0
-    end
+  
 
         
     #vertical inner lines
     for i in [7,11,22,23,12,6]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(60*corr), Int32(round(70*mesh_ref))]), "Progression", 1.05) # 1.02
+        gmsh.model.geo.mesh.setTransfiniteCurve(i,Int32(round(50*mesh_ref)), "Progression", 1.15) # 1.02
     end
     
     
     #inlet and leading edge
     for i in [9,19,26]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(50*corr), Int32(round(40*mesh_ref))]), "Progression", 1.0)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, Int32(round(25*mesh_ref)), "Progression", 1.0)
 
     end
 
     #top airfoil
     for i in [24,17,3]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(100*corr), Int32(round(50*mesh_ref))]), "Progression", 1.0)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, Int32(round(60*mesh_ref)), "Progression", 1.0)
     end
     
     #bottom airfoil
     for i in [25,18,1]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(100*corr), Int32(round(50*mesh_ref))]), "Progression", 1.0)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i, Int32(round(35*mesh_ref)), "Progression", 1.0)
     end
     
  
     
     #Shear Curves
     for i in [4,14,10,16,2]
-        gmsh.model.geo.mesh.setTransfiniteCurve(i, maximum([Int32(40*corr), Int32(round(30*mesh_ref))]), "Progression", 1.05)
+        gmsh.model.geo.mesh.setTransfiniteCurve(i,Int32(round(25*mesh_ref)), "Progression", 1.10)
     end
     
     
