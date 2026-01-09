@@ -84,10 +84,10 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     if isnothing(uh00) && t_endramp ==  t0
         #initialize with steady solution
         uh00,ph00 = solve_inc_primal_steady(am, simcase, nothing, uh00,uh00)
-        uh0.free_values .=  uh00.free_values
-        ph0.free_values .=  ph00.free_values
     end
 
+    uh0.free_values .=  uh00.free_values
+    ph0.free_values .=  ph00.free_values
 
 
 
@@ -122,7 +122,7 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
             push!(PH, copy(ph.free_values))
             println("Primal solved at time step $t")
                  
-            copyto!(am.params[:uh].free_values,uh.free_values)
+            copyto!(am.params[:uh].free_values, uh.free_values)
            
             if mod(idx,M)==0
                 pvd[t] = createvtk(Ω, nsubcells = order, joinpath(res_path, "$(filename)_$t" * ".vtu"), cellfields=["uh" => uh, "ph" => ph])
