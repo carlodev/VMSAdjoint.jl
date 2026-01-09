@@ -30,9 +30,12 @@ rbfd = RBFDesign(rbfg, ap0)
 sprob = StabilizedProblem(VMS(2))
 
 physicalp = PhysicalParameters(Re=1000, u_in=[1.0,0.0])
-timep = TimeParameters(dt=0.05, tF=1.0, time_window=(0.8, 1.0))
+timep = TimeParameters(dt=0.05, tF=5.0, time_window=(4.0, 5.0))
 
-meshinfo = AirfoilMesh(AoA= AoA, meshref=2)
+
+msh_size = MeshSize(BL_fl=1e-4,BL_tt=0.01 )
+meshinfo = AirfoilMesh(AoA= AoA, MS=msh_size)
+
 meshp = MeshParameters((1,1), 2, meshinfo)
 exportp = ExportParameters(printinitial=true,printmodel=true,name_tags=["airfoil"], fieldexport=[["uh","ph","friction"]])
 
@@ -53,7 +56,7 @@ end
 
 adj_solver = AdjSolver(δ=0.0001)
 
-adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,:unsteady)
+adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver, (:unsteady,:steady), J)
 finite_difference_analysis(adjoint_airfoil_problem)
 
 

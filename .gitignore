@@ -4,7 +4,7 @@ MeshPerturb/
 MeshFiles/
 Results_adj/
 Results_primal/
-
+RUNS/
 *.msh
 *.vtu
 *.jld2

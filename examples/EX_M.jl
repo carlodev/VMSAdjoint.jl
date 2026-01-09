@@ -30,10 +30,13 @@ rbfd = RBFDesign(rbfg, ap0)
 sprob = StabilizedProblem(VMS(2))
 
 physicalp = PhysicalParameters(Re=1000, u_in=[1.0,0.0])
-timep = TimeParameters(dt=0.05, tF=1.0, time_window=(0.8, 1.0)) #the time-window define the time-span for time-averaging
+timep = TimeParameters(dt=0.05, tF=1.0, time_window=(0.8, 1.0))
 
 
-meshinfo = AirfoilMesh(AoA= AoA, meshref=1)
+msh_size = MeshSize(BL_fl=1e-4,BL_tt=0.01 )
+
+meshinfo = AirfoilMesh(AoA= AoA, MS=msh_size)
+
 meshp = MeshParameters((1,1), 2, meshinfo)
 exportp = ExportParameters(printinitial=true,printmodel=true,name_tags=["airfoil"], fieldexport=[["uh","ph","friction"]])
 
@@ -47,9 +50,10 @@ airfoil_case = Airfoil(meshp,simparams,sprob)
 
 #Define the Objective Function, it only takes one argument [CD,CL], then you can define all the keywords you want
 #The boundary conditions are defined as -dJ/dCDCL
-function J(CDCL; CLtarget=0.75)
+function J(CDCL;)
     CD,CL=CDCL
-    return CD/CL  #0.5 * (CL - CLtarget)^2
+    CLtarget = 0.7
+    return 0.5 * (CL - CLtarget)^2
 end  
 
 
