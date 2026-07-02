@@ -227,7 +227,33 @@ function solve_inc_adj_unsteady(am::AirfoilModel, simcase::Airfoil,d_boundary::V
 
     uh0_adj.free_values .=  avg_UH_ADJ
     ph0_adj.free_values .=  avg_PH_ADJ
-    
+
+
+    # --- Covariance-correct unsteady sensitivity seed (Srinath & Mittal, JCP 2010) ---
+    # Build the time-AVERAGED wall-shear product  S = ⟨(∂v_t/∂n)(∂ψ_t/∂n)⟩  over the
+    # physical averaging window, pairing primal v(t) and adjoint ψ(t) at the SAME
+    # physical time. Storing S (rather than multiplying the two time-averaged fields)
+    # keeps the primal–adjoint covariance term; compute_gradient then only needs
+    # ∫_Γ ν S δβ dΓ per design parameter.
+    # The primal is rebuilt on the test space (airfoil no-slip ⇒ homogeneous Dirichlet),
+    # the adjoint on the trial space at t=0 (airfoil Dirichlet = d_boundary, constant in t).
+    @unpack tΓ, nΓ = params
+    V_prim, _ = create_primal_spaces(model, simcase)
+    Uadj0 = U_adj(0.0)
+    ∂ₜ∂n(u) = (∇(u) ⋅ tΓ) ⋅ nΓ
+
+    # skip the last 10*dt near tF: that is the adjoint start-up transient
+    t_hi = min(time_window[2], tF - 10 * dt)
+    win = findall(t -> time_window[1] <= t <= t_hi, time_vec)
+    @assert !isempty(win) "Sensitivity averaging window contains no time step"
+
+    # physical index j: primal = UH[j], adjoint = UH_ADJ[t_length - j + 1]
+    wall_shear_products = map(win) do j
+        v_j = FEFunction(V_prim, UH[j])
+        ψ_j = FEFunction(Uadj0,  UH_ADJ[t_length-j+1])
+        ∂ₜ∂n(v_j) * ∂ₜ∂n(ψ_j)
+    end
+    updatekey(params, :wall_shear_corr, sum(wall_shear_products) / length(wall_shear_products))
 
     return uh0_adj, ph0_adj
 end

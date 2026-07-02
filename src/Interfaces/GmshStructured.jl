@@ -32,6 +32,7 @@ function create_structured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign, i
 
     mesh_ref = meshref #rename variable
     #airfoil_divisions - > used only in the unstructured
+    want_quads = am.MS.element_type == :quad
 
     gmsh.initialize()
     
@@ -216,7 +217,8 @@ function create_structured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign, i
     
     
     gmsh.model.geo.synchronize()
-    gmsh.option.setNumber("Mesh.RecombineAll", 1)
+    # Transfinite surfaces give quads when recombined, triangles otherwise.
+    gmsh.option.setNumber("Mesh.RecombineAll", want_quads ? 1 : 0)
     
     #Points
     gmsh.model.addPhysicalGroup(0, [trailing,top_le_point,bottom_le_point], -1, "airfoil")

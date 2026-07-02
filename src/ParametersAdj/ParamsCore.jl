@@ -125,6 +125,8 @@ end
     meshref::Real=1.0 #increase it, and it wil increase the resolution. Put = 0 and it will be very coarse, useful to debug
     H::Real = 8
     Lback::Real = 8
+    element_type::Symbol = :quad #:quad or :tri. :tri is more robust for GridapGmsh (single cell type guaranteed)
+    @assert element_type in (:quad, :tri) "element_type must be :quad or :tri, got :$element_type"
 end
 
 @with_kw struct AirfoilMesh{S<:MeshStructure} <:MeshInfo

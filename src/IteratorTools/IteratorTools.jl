@@ -3,6 +3,7 @@ module IteratorTools
 using Parameters
 using Gridap
 using GridapGmsh
+import Gmsh: gmsh
 using Gridap.FESpaces
 using Gridap.CellData:OperationCellField, GenericMeasure
 using SegregatedVMSSolver.ParametersDef

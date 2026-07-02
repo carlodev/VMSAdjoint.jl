@@ -23,7 +23,7 @@ Compute the normaization of airfoil forces, obtaining CD and CL
 function compute_airfoil_coefficients(uh::SingleFieldFEFunction, ph::SingleFieldFEFunction, nΓ::OperationCellField, dΓ::GenericMeasure, physicalp::PhysicalParameters)
     @unpack c, u_in_mag, ν = physicalp
 
-    q = 0.5 * c * u_in_mag
+    q = 0.5 * c * u_in_mag^2  # dynamic pressure reference C∞ (ρ=1); must match compute_gradient
 
     D, L = compute_airfoil_forces(uh, ph, nΓ, dΓ, ν)
     CD = D / q

@@ -26,48 +26,46 @@ end
 
 
 
-function generate_regularized_model(adesign::AirfoilDesign, i::Int64, ss::Float64, meshinfo, physicalp, folder::String; initial_L=0.0, max_tries=10)
-    i_try = 0
-    model = nothing
+# Airfoil-surface denoising closure used to smooth a (possibly perturbed) design
+# before meshing. `L` is the sine-series regularization weight; TE/LE points are clamped.
+_denoise_fun(L::Float64) = function (x0, y0)
+    L <= 0.0 && return deepcopy(y0)
+    println("Denoise L $L")
+    y1 = fit_sine_series(x0, y0, 25; lambda=L).(x0)
+    y1[1:2] .= y0[1:2]
+    y1[end-1:end] .= y0[end-1:end]
+    return y1
+end
+
+"""
+    generate_regularized_model(adesign, i, ss, meshinfo, physicalp, folder; initial_L=0.0, max_tries=10, L_step=1e-5)
+
+Build a `GmshDiscreteModel` from `adesign`. If Gmsh produces a mesh that GridapGmsh
+cannot read, progressively increase the surface-smoothing weight `L` and retry, up to
+`max_tries` times. Gmsh is finalized before each attempt so a failed run never leaks
+state into the next one. Only mesh-generation failures are retried; interrupts and
+out-of-memory errors are rethrown.
+"""
+function generate_regularized_model(adesign::AirfoilDesign, i::Int64, ss::Float64, meshinfo, physicalp, folder::String; initial_L=0.0, max_tries=10, L_step=1e-5)
     L = initial_L
-    flag = true
 
-    function regf(x0, y0)
-        y1 = deepcopy(y0)
-        L > 0.0 && println("Denoise L $L")
-        # R > 0 && (y1, _ = denoise(y0; factor=R))
-        fn = fit_sine_series(x0,y0, 25,lambda = L) 
-        L > 0 && (y1 = fn.(x0) ) 
-        y1[1:2] = y0[1:2]
-        y1[end-1:end] = y0[end-1:end]
+    for i_try in 0:max_tries
+        # tear down any Gmsh session left open by a previous failed attempt
+        gmsh.isInitialized() == 1 && gmsh.finalize()
 
-        return y1
-    end
-
-    reg = Regularization(active=true, iter_reg=1, fun=regf)
-
-    while flag && i_try <= max_tries
-        adesign_tmp = adesign
-        if ss> 0.0 
-            adesign_tmp = perturb_DesignParameter(adesign, i, ss)
-        end
-
+        adesign_tmp = ss > 0.0 ? perturb_DesignParameter(adesign, i, ss) : adesign
+        reg = Regularization(active=true, iter_reg=1, fun=_denoise_fun(L))
         adesign_r = regularize_airfoil(adesign_tmp, 1, reg)
         modelname = create_msh(meshinfo, adesign_r, physicalp, folder; iter=i)
-        
-        try
-            model = GmshDiscreteModel(modelname)
-            flag = false
-        catch
-            i_try += 1
-            L += 0.00001
-            println("Mesh gen $(i_try)")
-            if i_try==max_tries
-                @error "Impossible to generate a regularized model"
-            end
 
+        try
+            return GmshDiscreteModel(modelname)
+        catch err
+            err isa InterruptException && rethrow()
+            @warn "Mesh generation failed (try $i_try), increasing smoothing" L exception = err
+            L += L_step
         end
     end
 
-    return model
+    error("Impossible to generate a regularized model after $max_tries tries")
 end

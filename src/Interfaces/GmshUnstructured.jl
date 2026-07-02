@@ -26,8 +26,9 @@ function create_unstructured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,
     
 
     airfoil_points = airfoil_design.ap
-    @unpack  Lback, H, meshref,BL_fl,BL_tt, airfoil_divisions = am.MS
+    @unpack  Lback, H, meshref,BL_fl,BL_tt, airfoil_divisions, element_type = am.MS
     @unpack AoA = am
+    want_quads = element_type == :quad
 
     gmsh.initialize()
     
@@ -123,7 +124,7 @@ function create_unstructured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,
     gmsh.model.mesh.field.setNumber(1, "SizeFar", 0.01) 
     gmsh.model.mesh.field.setNumber(1, "Thickness", BL_tt)    # total thickness
     gmsh.model.mesh.field.setNumber(1, "Ratio", 1.12)          # growth rate
-    gmsh.model.mesh.field.setNumber(1, "Quads", 1)  
+    gmsh.model.mesh.field.setNumber(1, "Quads", want_quads ? 1 : 0)
     
     # gmsh.model.mesh.field.setNumbers(1, "FanPointsList", [trailing])
     # gmsh.option.setNumber("Mesh.BoundaryLayerFanElements", 11)
@@ -153,12 +154,21 @@ function create_unstructured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,
 
     gmsh.model.geo.synchronize()
 
-
-    gmsh.option.setNumber("Mesh.RecombineAll", 1)
+    if want_quads
+        # Force a *pure quad* mesh. RecombineAll is best-effort and often leaves
+        # stray triangles at the BL/wake transition, producing a hybrid mesh that
+        # GridapGmsh cannot read (it needs a single 2D cell type). SubdivisionAlgorithm=1
+        # subdivides every remaining triangle into quads, guaranteeing an all-quad mesh.
+        gmsh.option.setNumber("Mesh.RecombineAll", 1)
+        gmsh.option.setNumber("Mesh.RecombinationAlgorithm", 1) # blossom
+        gmsh.option.setNumber("Mesh.SubdivisionAlgorithm", 1)   # 1 = all-quads
+    else
+        # Pure triangular mesh: single cell type, most robust for GridapGmsh.
+        gmsh.option.setNumber("Mesh.RecombineAll", 0)
+        gmsh.option.setNumber("Mesh.SubdivisionAlgorithm", 0)
+    end
 
     gmsh.model.geo.synchronize()
-
-    # gmsh.option.setNumber("Mesh.SubdivisionAlgorithm", 1)  # or 0, depending on surface shape
 
     
     #Points
