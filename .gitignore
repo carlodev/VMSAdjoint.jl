@@ -13,3 +13,4 @@ RUNS/
 *.out
 *.pdf
 *.svg
+/papers

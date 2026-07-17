@@ -34,7 +34,7 @@ function finite_difference_analysis(adjoint_airfoil_problem::AdjointProblem; idx
     #create the new airfoil model from the weights w
     adesign = create_AirfoilDesign(adesign,w)
 
-    model = generate_regularized_model(adesign, 0, 0.0, meshinfo, physicalp, "MeshFiles")
+    model = generate_model(adesign, 0, 0.0, meshinfo, physicalp, "MeshFiles")
 
      #modelname = create_msh(meshinfo,adesign, physicalp ; iter = 0)
      #model = GmshDiscreteModel(modelname)
@@ -64,15 +64,14 @@ function iterate_fd(shift::Vector{Float64}, idxs::Vector{Int64}, adesign::Airfoi
     fddir = "FD"
     mkpath(fddir)
 
-    # Ndes = length(shift)
-    Nidxs = length(idxs)
-
     meshinfo = airfoil_case.meshp.meshinfo
-    physicalp =airfoil_case.simulationp.physicalp
+    physicalp = airfoil_case.simulationp.physicalp
 
-
-    fval_fd = zeros(Nidxs)
-    CLCD_fd = [zeros(length(2)) for i= 1:Nidxs]
+    # sized by the TOTAL number of design parameters: the loop indexes by the
+    # design index i ∈ idxs, which may be a non-contiguous subset
+    Ndes = length(shift)
+    fval_fd = zeros(Ndes)
+    CLCD_fd = [zeros(2) for _ in 1:Ndes]
 
     
     for i in idxs
@@ -81,7 +80,7 @@ function iterate_fd(shift::Vector{Float64}, idxs::Vector{Int64}, adesign::Airfoi
 
         println("Perturbation Domain $i")
 
-        model_tmp = generate_regularized_model(adesign, i, ss, meshinfo, physicalp, "MeshPerturb")
+        model_tmp = generate_model(adesign, i, ss, meshinfo, physicalp, "MeshPerturb")
 
         am_tmp =  AirfoilModel(model_tmp, airfoil_case)
 

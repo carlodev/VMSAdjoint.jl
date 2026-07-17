@@ -1,9 +1,10 @@
+"""
+    Interfaces
+
+Interfaces with the external packages: Gmsh (mesh generation), Gridap
+(boundary/field extraction) and SegregatedVMSSolver (VMS stabilization).
+"""
 module Interfaces
-
-"""
-In this module interfaces with existing packages are implemented
-"""
-
 
 using AirfoilTools
 using Gmsh
@@ -12,7 +13,6 @@ using LinearAlgebra
 using VMSAdjoint.ParametersAdj
 using SegregatedVMSSolver.ParametersDef
 using SegregatedVMSSolver.Equations
-using AirfoilTools
 
 export updatekey
 export verifykey
@@ -24,9 +24,6 @@ include("GmshInterfaceUnified.jl")
 export get_aerodynamic_features
 include("GridapInterface.jl")
 
-
-export get_aerodynamic_features
 include("VMSInterface.jl")
-
 
 end

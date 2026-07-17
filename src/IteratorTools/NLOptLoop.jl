@@ -96,20 +96,15 @@ function f_and_∇f(w::Vector{Float64}, grad::Vector{Float64}, cache::SharedCach
     #create the new airfoil model from the weights w
     adesign = create_AirfoilDesign(adesign,w)
     adesign = regularize_airfoil(adesign, iter, regularization) #design regularization
-    model = generate_regularized_model(adesign, iter, 0.0, meshinfo, physicalp, "MeshFiles")
+    model = generate_model(adesign, iter, 0.0, meshinfo, physicalp, "MeshFiles")
     
     writevtk(model, "model_$iter")
     am =  AirfoilModel(model, vbcase)
 
 
-    #Solve Primal 
-    if timesol==:steady
-        filename = joinpath("Results_primal", "SOL_$(iter).vtu")
-    else
-        filename = "sol_$(iter)"
-    end
-
-    uh,ph = solve_inc_primal(am, vbcase, filename, timesol[1]; uh0=nothing,ph0=nothing)    
+    #Solve Primal
+    filename = "sol_$(iter)"
+    uh,ph = solve_inc_primal(am, vbcase, filename, timesol[1]; uh0=nothing,ph0=nothing)
  
     #### extract results from primal solution: Cp (and Cf)
     PressureCoefficient = get_aerodynamic_features(am,uh,ph)
@@ -165,7 +160,7 @@ function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am
     for (i,ss) in enumerate(shift)
         @info "Perturbation Domain $i"
 
-        model_tmp = generate_regularized_model(adesign, i, ss, meshinfo, physicalp, "MeshPerturb")
+        model_tmp = generate_model(adesign, i, ss, meshinfo, physicalp, "MeshPerturb")
         am_tmp =  AirfoilModel(model_tmp, airfoil_case)
 
         Ji[i],Jthickness[i] = compute_sensitivity(am, am_tmp,adesign, i,ss, airfoil_case,thick_penalty, uh,uhadj) 

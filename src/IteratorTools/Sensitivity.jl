@@ -16,14 +16,14 @@ mesh-deformation field is built; that part is dispatched through
 """
 function compute_sensitivity(am0::AirfoilModel, am1::AirfoilModel, adesign::AirfoilDesign, IIDX::Int64, δ::Float64, simcase::Airfoil, thick_penalty::ThickPenalty, uh, uhadj)
     @sunpack ν = simcase
-    @unpack tΓ, nΓ, dΓ = am0.params
+    @unpack nΓ, dΓ = am0.params
 
     physicalp = simcase.simulationp.physicalp
     C∞ = 0.5 * physicalp.c * physicalp.u_in_mag^2  # force-coefficient reference; must match ObjectiveFunctions.q
 
     v_field_corr = deformation_normal_field(adesign, IIDX, am0, am1, δ, simcase)
 
-    return compute_gradient(uh, uhadj, ν, tΓ, nΓ, dΓ, am0, am1, δ, thick_penalty, v_field_corr, C∞)
+    return compute_gradient(uh, uhadj, ν, nΓ, dΓ, am0, am1, δ, thick_penalty, v_field_corr, C∞)
 end
 
 
@@ -82,33 +82,34 @@ end
 
 
 """
-    compute_gradient(uh, uhadj, ν, tΓ, nΓ, dΓ, am0, am1, δ, thick_penalty, v_field_corr, C∞)
+    compute_gradient(uh, uhadj, ν, nΓ, dΓ, am0, am1, δ, thick_penalty, v_field_corr, C∞)
 
 Higher-derivative-free surface sensitivity (Sorgiovanni 2016, Eq. 3.78 / Castro et al.,
 Total-Force LFA):
 
-    dJ/dβ = (1/C∞) ∫_Γ  ν S δβ  dΓ ,   S = ⟨(∂v_t/∂n)(∂ψ_t/∂n)⟩
+    dJ/dβ = (1/C∞) ∫_Γ  ν S δβ  dΓ ,   S = ⟨∂ₙᵗv ⋅ ∂ₙᵗψ⟩
 
-with v = primal velocity (uh), ψ = adjoint velocity (uhadj), t/n the wall tangent/normal
-and δβ = `v_field_corr` the normal mesh displacement. In Gridap's convention
-(∇u)[i,j] = ∂u_j/∂x_i, the contraction `(∇(u)⋅tΓ)⋅nΓ` evaluates to ∂u_t/∂n.
+with v = primal velocity (uh), ψ = adjoint velocity (uhadj), δβ = `v_field_corr`
+the normal mesh displacement, and ∂ₙᵗ the tangential wall-shear operator
+[`tangential_normal_derivative`](@ref) — dimension-independent replacement of the
+former 2D tangent-based kernel (∂v_t/∂n)(∂ψ_t/∂n), to which it is identical in 2D.
 
-- Steady / averaged flow: S is the instantaneous product (∂v_t/∂n)(∂ψ_t/∂n).
+- Steady / averaged flow: S is the instantaneous product ∂ₙᵗv ⋅ ∂ₙᵗψ.
 - Unsteady flow: the unsteady adjoint solver builds the *time-averaged product*
-  ⟨(∂v_t/∂n)(∂ψ_t/∂n)⟩ (which keeps the primal–adjoint covariance term that a
+  ⟨∂ₙᵗv ⋅ ∂ₙᵗψ⟩ (which keeps the primal–adjoint covariance term that a
   product of time-averages would drop — see Srinath & Mittal, JCP 2010, Eq. 12) and
   stores it in `am0.params[:wall_shear_corr]`. When present, it is used directly.
 
 `C∞` is passed explicitly (previously hard-coded as the factor 2, valid only for
 c = u∞ = 1). The kernel returns the same value as before when C∞ = 0.5.
 """
-function compute_gradient(uh, uhadj, ν, tΓ, nΓ, dΓ, am0, am1, δ, thick_penalty, v_field_corr, C∞)
-    ∂ₜ∂n(u) = (∇(u) ⋅ tΓ) ⋅ nΓ  # ∂u_t/∂n
+function compute_gradient(uh, uhadj, ν, nΓ, dΓ, am0, am1, δ, thick_penalty, v_field_corr, C∞)
+    ∂ₙᵗ(u) = tangential_normal_derivative(u, nΓ)
 
     # unsteady: time-averaged wall-shear correlation built by the adjoint solver;
     # steady: instantaneous product of the two supplied fields.
     S = get(am0.params, :wall_shear_corr, nothing)
-    wall_shear = isnothing(S) ? ∂ₜ∂n(uh) * ∂ₜ∂n(uhadj) : S
+    wall_shear = isnothing(S) ? ∂ₙᵗ(uh) ⋅ ∂ₙᵗ(uhadj) : S
 
     J_sens = (1 / C∞) * sum(∫(ν * wall_shear * v_field_corr)dΓ)
 

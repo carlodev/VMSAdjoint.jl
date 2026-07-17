@@ -79,7 +79,7 @@ am0 = AirfoilModel(model, airfoil_case)
 δ = adj_solver.δ
 ss = δ*1
 
-model1 = generate_regularized_model(rbfd, 2, ss, meshinfo, physicalp, "MeshPerturb")
+model1 = generate_model(rbfd, 2, ss, meshinfo, physicalp, "MeshPerturb")
 am1 =  AirfoilModel(model1, airfoil_case)
 
 using VMSAdjoint.IteratorTools
@@ -90,7 +90,7 @@ shiftv =   vcat(shift) #[δ,δ,δ,δ,δ...., -δ,-δ,-δ,-δ,.....]
 Jthickness = zeros(40)
 for (i,ss) in enumerate(shiftv)
     @info "Perturbation Domain $i"
-    model_tmp = generate_regularized_model(rbfd, i, ss, meshinfo, physicalp, "MeshPerturb")
+    model_tmp = generate_model(rbfd, i, ss, meshinfo, physicalp, "MeshPerturb")
     am_tmp =  AirfoilModel(model_tmp, airfoil_case)
     Jthickness[i] = compute_∇penalty(am0,am_tmp,  δ, thick_penalty) #-> fix bug here
     println(Jthickness[i])

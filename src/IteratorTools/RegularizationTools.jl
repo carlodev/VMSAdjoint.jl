@@ -26,46 +26,32 @@ end
 
 
 
-# Airfoil-surface denoising closure used to smooth a (possibly perturbed) design
-# before meshing. `L` is the sine-series regularization weight; TE/LE points are clamped.
-_denoise_fun(L::Float64) = function (x0, y0)
-    L <= 0.0 && return deepcopy(y0)
-    println("Denoise L $L")
-    y1 = fit_sine_series(x0, y0, 25; lambda=L).(x0)
-    y1[1:2] .= y0[1:2]
-    y1[end-1:end] .= y0[end-1:end]
-    return y1
-end
-
 """
-    generate_regularized_model(adesign, i, ss, meshinfo, physicalp, folder; initial_L=0.0, max_tries=10, L_step=1e-5)
+    generate_model(adesign, i, ss, meshinfo, physicalp, folder; max_cells=1_500_000)
 
-Build a `GmshDiscreteModel` from `adesign`. If Gmsh produces a mesh that GridapGmsh
-cannot read, progressively increase the surface-smoothing weight `L` and retry, up to
-`max_tries` times. Gmsh is finalized before each attempt so a failed run never leaks
-state into the next one. Only mesh-generation failures are retried; interrupts and
-out-of-memory errors are rethrown.
+Build a `GmshDiscreteModel` from `adesign`, perturbing design parameter `i` by the
+signed shift `ss` (`ss = 0` -> baseline geometry). No surface regularization is
+applied here: design regularization happens only when the user explicitly requests
+it through `AdjSolver(regularization = ...)`, which is consumed by
+`regularize_airfoil` before this function is called.
+
+`max_cells` guards against runaway mesh density (seen with mismatched Gmsh
+versions, where background-field sizing behaves differently): the run aborts
+immediately instead of hanging in the linear solver.
 """
-function generate_regularized_model(adesign::AirfoilDesign, i::Int64, ss::Float64, meshinfo, physicalp, folder::String; initial_L=0.0, max_tries=10, L_step=1e-5)
-    L = initial_L
+function generate_model(adesign::AirfoilDesign, i::Int64, ss::Float64, meshinfo, physicalp, folder::String; max_cells::Int=1_500_000)
+    adesign_tmp = ss != 0.0 ? perturb_DesignParameter(adesign, i, ss) : adesign
 
-    for i_try in 0:max_tries
-        # tear down any Gmsh session left open by a previous failed attempt
-        gmsh.isInitialized() == 1 && gmsh.finalize()
+    modelname = create_msh(meshinfo, adesign_tmp, physicalp, folder; iter=i)
 
-        adesign_tmp = ss > 0.0 ? perturb_DesignParameter(adesign, i, ss) : adesign
-        reg = Regularization(active=true, iter_reg=1, fun=_denoise_fun(L))
-        adesign_r = regularize_airfoil(adesign_tmp, 1, reg)
-        modelname = create_msh(meshinfo, adesign_r, physicalp, folder; iter=i)
+    model = GmshDiscreteModel(modelname)
 
-        try
-            return GmshDiscreteModel(modelname)
-        catch err
-            err isa InterruptException && rethrow()
-            @warn "Mesh generation failed (try $i_try), increasing smoothing" L exception = err
-            L += L_step
-        end
-    end
+    ncells = num_cells(model)
+    ncells <= max_cells || error(
+        "Generated mesh has $ncells cells (> max_cells = $max_cells). " *
+        "This usually means the Gmsh version differs from the one the sizing was tuned on " *
+        "(check `gmsh.option.getString(\"General.Version\")`). " *
+        "Raise `max_cells` only if the density is intentional.")
 
-    error("Impossible to generate a regularized model after $max_tries tries")
+    return model
 end

@@ -125,11 +125,20 @@ end
     meshref::Real=1.0 #increase it, and it wil increase the resolution. Put = 0 and it will be very coarse, useful to debug
     H::Real = 8
     Lback::Real = 8
-    element_type::Symbol = :quad #:quad or :tri. :tri is more robust for GridapGmsh (single cell type guaranteed)
-    @assert element_type in (:quad, :tri) "element_type must be :quad or :tri, got :$element_type"
 end
 
+"""
+    AirfoilMesh{Structured|Unstructured}
+
+Mesh recipe for the airfoil domain. Supported element types:
+- `Structured`:   `:TRI` or `:QUAD` (transfinite C-type mesh, optionally recombined)
+- `Unstructured`: `:TRI` only (a quad/mixed unstructured mesh cannot be read by GridapGmsh)
+
+The combination is validated in `create_msh`; CST designs additionally require a
+`Structured` mesh (see `validate_mesh_config`).
+"""
 @with_kw struct AirfoilMesh{S<:MeshStructure} <:MeshInfo
+    elements::Symbol=:TRI
     AoA::Real #Angle of Attack - degrees
     folder::String="MeshFiles"
     MS::MeshSize = MeshSize()

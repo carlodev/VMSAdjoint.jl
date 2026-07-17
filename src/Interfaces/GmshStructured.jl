@@ -1,7 +1,13 @@
 
 
 
-function create_structured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign, iter::Int64, chord::Real, folder::String)
+"""
+    build_structured_msh(am, airfoil_design, iter, chord, folder)
+
+Build a structured C-type mesh around the airfoil. Must run inside a Gmsh
+session (see [`with_gmsh`](@ref)); returns the written `.msh` file path.
+"""
+function build_structured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign, iter::Int64, chord::Real, folder::String)
 
     
     function split_splines_points(airfoil_points::AirfoilPoints, AoA::Float64; pos=0.065, chord = 1.0)
@@ -31,11 +37,8 @@ function create_structured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign, i
     @unpack AoA = am
 
     mesh_ref = meshref #rename variable
-    #airfoil_divisions - > used only in the unstructured
-    want_quads = am.MS.element_type == :quad
+    #airfoil_divisions -> used only in the unstructured mesh
 
-    gmsh.initialize()
-    
     gmsh.model.add("Model1")
     Lback = Lback*chord
     H= H*chord
@@ -217,9 +220,9 @@ function create_structured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign, i
     
     
     gmsh.model.geo.synchronize()
-    # Transfinite surfaces give quads when recombined, triangles otherwise.
-    gmsh.option.setNumber("Mesh.RecombineAll", want_quads ? 1 : 0)
-    
+    am.elements==:QUAD && force_all_quads!() # recombined transfinite surfaces -> pure-quad mesh
+
+
     #Points
     gmsh.model.addPhysicalGroup(0, [trailing,top_le_point,bottom_le_point], -1, "airfoil")
     gmsh.model.addPhysicalGroup(0, [trailing], -1, "trailing")
@@ -240,12 +243,5 @@ function create_structured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign, i
     #Surfaces
     gmsh.model.addPhysicalGroup(2, collect(1:10),-1, "fluid")
     
-    mkpath(folder)
-
-    mesh_filename = joinpath(folder,"Mesh$iter.msh")
-
-    gmsh.model.mesh.generate(2)
-    gmsh.write(mesh_filename)
-    gmsh.finalize()
-    return mesh_filename
+    return generate_and_write_msh(folder, iter)
 end

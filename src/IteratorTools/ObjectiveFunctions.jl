@@ -1,52 +1,48 @@
+#############################################################################
+# Aerodynamic coefficients, objective function and its derivative
+#############################################################################
 
-###################################################################################
-#Iterators
-##################################################################################
 """
-   compute_airfoil_forces(uh::SingleFieldFEFunction,ph::SingleFieldFEFunction,nΓ::OperationCellField,dΓ::GenericMeasure,ν::Float64)
+    compute_airfoil_forces(uh, ph, nΓ, dΓ, ν)
 
-It computes Drag and Lift over airfoil boundary. It takes into account pressure and velocity gradient.
-It needs the normals pointings outward respect to the body.
+Drag and lift over the airfoil boundary, accounting for pressure and viscous
+stresses. `nΓ` must point outward with respect to the body.
 """
-
 function compute_airfoil_forces(uh::SingleFieldFEFunction, ph::SingleFieldFEFunction, nΓ::OperationCellField, dΓ::GenericMeasure, ν::Float64)
-    IForce = ∫(-ph ⋅ nΓ + ν * (∇(uh) + transpose(∇(uh))) ⋅ nΓ)dΓ #+ 
+    IForce = ∫(-ph ⋅ nΓ + ν * (∇(uh) + transpose(∇(uh))) ⋅ nΓ)dΓ
     D, L = sum(IForce)
     return D, L
 end
 
 """
-    compute_airfoil_coefficients(uh::SingleFieldFEFunction,ph::SingleFieldFEFunction,nΓ::OperationCellField,dΓ::GenericMeasure, physicalp::PhysicalParameters)
+    compute_airfoil_coefficients(uh, ph, nΓ, dΓ, physicalp)
 
-Compute the normaization of airfoil forces, obtaining CD and CL
+Normalize the airfoil forces by the dynamic-pressure reference, obtaining `(CD, CL)`.
 """
 function compute_airfoil_coefficients(uh::SingleFieldFEFunction, ph::SingleFieldFEFunction, nΓ::OperationCellField, dΓ::GenericMeasure, physicalp::PhysicalParameters)
     @unpack c, u_in_mag, ν = physicalp
 
-    q = 0.5 * c * u_in_mag^2  # dynamic pressure reference C∞ (ρ=1); must match compute_gradient
+    q = 0.5 * c * u_in_mag^2 # dynamic pressure reference C∞ (ρ=1); must match compute_gradient
 
     D, L = compute_airfoil_forces(uh, ph, nΓ, dΓ, ν)
     CD = D / q
     CL = L / q
-    println("----------")
-    println("CL = $CL ; CD = $CD")
-    println("----------")
+
+    @info "CL = $CL ; CD = $CD"
 
     return CD, CL
 end
 
-
 """
-    obj_fun(am::AirfoilModel, vbcase::AdjointProblem, uh, ph, fun::Function)
+    obj_fun(am::AirfoilModel, vbcase::Airfoil, uh, ph, thick_penalty, fun::Function)
 
-It computes the value of the objective function fun. It has a penalty to have a minimum thickness.
-It gives fitnessvalue, [CD,CL]
+Value of the objective function `fun([CD, CL])`, augmented with the
+minimum-thickness penalty. Returns `(fitness + penalty, [CD, CL])`.
 """
 function obj_fun(am::AirfoilModel, vbcase::Airfoil, uh, ph, thick_penalty::ThickPenalty, fun::Function)
     @sunpack order = vbcase
-    @unpack model, params = am
+    @unpack model = am
     @unpack thickness_penalty, valid = thick_penalty
-
 
     Γ = BoundaryTriangulation(model; tags="airfoil")
     dΓ = Measure(Γ, 2 * order)
@@ -55,63 +51,62 @@ function obj_fun(am::AirfoilModel, vbcase::Airfoil, uh, ph, thick_penalty::Thick
     physicalp = vbcase.simulationp.physicalp
     CD, CL = compute_airfoil_coefficients(uh, ph, nΓ, dΓ, physicalp)
 
-    interpolated_points = interpolate_points_x(am)
-    thick_pen = (valid) ? thickness_penalty(interpolated_points ) : 0.0
+    thick_pen = valid ? thickness_penalty(interpolate_points_x(am)) : 0.0
     fitnessval = fun([CD, CL])
 
-    println("----------")
-    println("fitnessval = $(fitnessval) ")
-    println("thickness_penalty = $(thick_pen)")
-    println("----------")
+    @info "fitnessval = $fitnessval ; thickness_penalty = $thick_pen"
 
     return fitnessval + thick_pen, [CD, CL]
 end
 
-function interpolate_points_x(am::AirfoilModel)
-    
-    leading_edge_cutoff = 0.01
-    trailing_edge_cutoff = 0.01
-
-    # Find the overall x-range of the airfoil
-    xx0 = maximum([minimum(am.ap.xu);minimum(am.ap.xl)] )+ leading_edge_cutoff
-    xx1 =minimum([maximum(am.ap.xu);maximum(am.ap.xl)] )- trailing_edge_cutoff
- 
-
-    @assert xx1 > xx0 "Airfoil x-coordinates don't span a valid range"
-
-    # Filter points to exclude the leading and trailing edge regions
-
-    # For upper surface
-    valid_upper_idx = findall(x -> xx1  >= x >= xx0 , am.ap.xu)
-    xu_filtered = am.ap.xu[valid_upper_idx]
-    yu_filtered = am.ap.yu[valid_upper_idx]
-
-    # For lower surface
-    valid_lower_idx = findall(x ->xx1  >= x >= xx0 , am.ap.xl)
-    xl_filtered = am.ap.xl[valid_lower_idx]
-    yl_filtered = am.ap.yl[valid_lower_idx]
-
-    # Verify the filtered coordinates are sorted
-    @assert issorted(xu_filtered) "Upper surface x-coordinates not sorted"
-    @assert issorted(xl_filtered) "Lower surface x-coordinates not sorted"
-
-    # Create evaluation points
-    xx01 = maximum([minimum(xu_filtered);minimum(xl_filtered)] )
-    xx11 =minimum([maximum(xu_filtered);maximum(xl_filtered)] )
-    xx = collect(LinRange(xx01, xx11, 201))
-
-    
-    # Interpolate surfaces
-    yu = linear_interpolation(xu_filtered, yu_filtered).(xx)
-    yl = linear_interpolation(xl_filtered, yl_filtered).(xx)
-    return (xx, yu, yl)
-end
-
 """
     dJobj_fun(fun::Function, CDCL::Vector{Float64})
-Automatic Differentiation to compute the Adjoint Boundary Conditions from the objective function
+
+Gradient of the objective function with respect to `[CD, CL]` via automatic
+differentiation; its negative is the adjoint boundary condition on the airfoil.
 """
 function dJobj_fun(fun::Function, CDCL::Vector{Float64})
     @assert length(CDCL) == 2
-    ForwardDiff.gradient(x -> fun(x), CDCL)
+    ForwardDiff.gradient(fun, CDCL)
+end
+
+#############################################################################
+# Thickness sampling
+#############################################################################
+
+"Filter one airfoil surface to `x ∈ [xx0, xx1]`, asserting sortedness."
+function _filter_surface(x::Vector{Float64}, y::Vector{Float64}, xx0::Float64, xx1::Float64, side::String)
+    valid_idx = findall(xi -> xx0 <= xi <= xx1, x)
+    x_f, y_f = x[valid_idx], y[valid_idx]
+    @assert issorted(x_f) "$side surface x-coordinates not sorted"
+    return x_f, y_f
+end
+
+"""
+    interpolate_points_x(am::AirfoilModel)
+
+Sample both airfoil surfaces on a common x-grid (excluding small leading/trailing
+edge cutoffs), for the thickness-penalty evaluation. Returns `(xx, yu, yl)`.
+"""
+function interpolate_points_x(am::AirfoilModel)
+    leading_edge_cutoff = 0.01
+    trailing_edge_cutoff = 0.01
+
+    # overall valid x-range of the airfoil
+    xx0 = maximum([minimum(am.ap.xu); minimum(am.ap.xl)]) + leading_edge_cutoff
+    xx1 = minimum([maximum(am.ap.xu); maximum(am.ap.xl)]) - trailing_edge_cutoff
+    @assert xx1 > xx0 "Airfoil x-coordinates don't span a valid range"
+
+    xu_f, yu_f = _filter_surface(am.ap.xu, am.ap.yu, xx0, xx1, "Upper")
+    xl_f, yl_f = _filter_surface(am.ap.xl, am.ap.yl, xx0, xx1, "Lower")
+
+    # common evaluation points
+    xx01 = maximum([minimum(xu_f); minimum(xl_f)])
+    xx11 = minimum([maximum(xu_f); maximum(xl_f)])
+    xx = collect(LinRange(xx01, xx11, 201))
+
+    yu = linear_interpolation(xu_f, yu_f).(xx)
+    yl = linear_interpolation(xl_f, yl_f).(xx)
+
+    return (xx, yu, yl)
 end

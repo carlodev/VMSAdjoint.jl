@@ -5,16 +5,13 @@ using SegregatedVMSSolver.ParametersDef
 
 # =============================================================================
 # Adjoint shape sensitivity of a NACA0012 (AoA = 2.5 deg, Re = 1000)
-# computed on FOUR mesh configurations:
-#   1. structured        mesh, quads
-#   2. structured        mesh, triangles
-#   3. unstructured + BL  mesh, quads
-#   4. unstructured + BL  mesh, triangles
+# computed on TWO mesh configurations:
+#   1. structured C-type mesh
+#   2. unstructured mesh with boundary layer
 #
-# The element type is selected through `MeshSize(element_type = :quad | :tri)`.
-# :tri guarantees a single cell type and is the most robust for GridapGmsh;
-# :quad forces a pure-quad mesh (SubdivisionAlgorithm=1) so no stray triangles
-# survive recombination.
+# Element types: structured meshes may be :TRI or :QUAD (transfinite, optionally
+# recombined); unstructured meshes are :TRI only (GridapGmsh requires a single
+# 2D cell type). CST designs additionally require a structured mesh.
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -23,6 +20,8 @@ using SegregatedVMSSolver.ParametersDef
 fname = "n0012.csv"
 AoA   = 2.5
 ap0   = get_airfoil_coordinates(joinpath(@__DIR__, fname))
+
+ap0.yu[5] = ap0.yu[5] * 1
 
 control_px     = collect(LinRange(0.05, 0.95, 20))     # 20 + 20 = 40 control points
 control_points = ControlPoints(control_px, control_px)
@@ -57,20 +56,29 @@ J(CDCL) = CDCL[1]
 thick_penalty = ThickPenalty()   # inactive by default (valid=false) -> no penalty contribution
 δ             = 1e-4             # design-parameter perturbation
 
+
+meshinfo = AirfoilMesh{Unstructured}(elements=:TRI, AoA = AoA, MS = MeshSize(BL_fl = 1e-4, BL_tt = 0.01, meshref = 1.0))
+tag = "tri_unstructured_BL"
+
 # ---------------------------------------------------------------------------
 # Full adjoint-sensitivity pass for one mesh configuration
 # ---------------------------------------------------------------------------
-function sensitivity_for_mesh(meshinfo::AirfoilMesh; tag::String = "case")
-    meshp        = MeshParameters((1, 1), 2, meshinfo)
-    simparams    = SimulationParameters(timep, physicalp, solverp, exportp)
-    airfoil_case = Airfoil(meshp, simparams, sprob)
 
-    # baseline mesh + model
-    model = generate_regularized_model(rbfd, 0, 0.0, meshinfo, physicalp, "MeshFiles_$tag")
-    am    = AirfoilModel(model, airfoil_case)
 
-    # primal
-    uh, ph = solve_inc_primal(am, airfoil_case, "primal_$tag", timesol[1])
+
+meshp        = MeshParameters((1, 1), 2, meshinfo)
+simparams    = SimulationParameters(timep, physicalp, solverp, exportp)
+airfoil_case = Airfoil(meshp, simparams, sprob)
+
+# baseline mesh + model
+model = generate_model(rbfd, 0, 0.0, meshinfo, physicalp, "MeshFiles_$tag")
+am    = AirfoilModel(model, airfoil_case)
+
+
+
+
+# primal
+uh, ph = solve_inc_primal(am, airfoil_case, "primal_$tag", timesol[1])
 
     # objective value + adjoint boundary condition
     fval, CDCL = obj_fun(am, airfoil_case, uh, ph, thick_penalty, J)
@@ -84,37 +92,17 @@ function sensitivity_for_mesh(meshinfo::AirfoilMesh; tag::String = "case")
     shiftv = vcat(CSTweights(Int(Ndes ÷ 2), δ))   # [+δ … , -δ …] -> outward on both surfaces
     grad   = zeros(Ndes)
     for (i, ss) in enumerate(shiftv)
-        model_tmp = generate_regularized_model(rbfd, i, ss, meshinfo, physicalp, "MeshPerturb_$tag")
+        model_tmp = generate_model(rbfd, i, ss, meshinfo, physicalp, "MeshPerturb_$tag")
         am_tmp    = AirfoilModel(model_tmp, airfoil_case)
         Jsens, _  = compute_sensitivity(am, am_tmp, rbfd, i, ss, airfoil_case, thick_penalty, uh, uhadj)
         grad[i]   = Jsens
     end
 
-    return grad, CDCL
-end
+using Plots
 
-# ---------------------------------------------------------------------------
-# The four mesh configurations
-# ---------------------------------------------------------------------------
-meshref = 2
+shift = CSTweights(Int(Ndes/2), δ)
+δv=   vcat(shift)
+fd = ([ 0.1216404544975305, 0.12164022538139854, 0.121639265678663, 0.12163864470430423, 0.12163829871723085, 0.12163808109652317, 0.12163789670091155, 0.12163769948157467, 0.12163746739003616, 0.1216371925430035, 0.12163687744654388, 0.12163653066004938, 0.12163616545553438, 0.12163579709642698, 0.12163544348892595, 0.12163511230041991, 0.1216348114898485, 0.1216345602199478, 0.12163435681023815, 0.12163427508648679, 0.12163706730354933, 0.12163706106603764, 0.12163663022813836, 0.1216362323852443, 0.12163596143757201, 0.12163582081275652, 0.12163578439796892, 0.12163582287820633, 0.12163591042708378, 0.12163602986232984, 0.12163617245015604, 0.12163633750628997, 0.12163652509682873, 0.12163673532585907, 0.12163697580637903, 0.12163722805357227, 0.12163748254041373, 0.12163779866991345, 0.12163817398616644, 0.12163895833965868] .- 0.12163386560377128) ./ δv
 
-configs = [
-    ("structured_quads",      AirfoilMesh{Structured}(  AoA = AoA, MS = MeshSize(meshref = meshref, element_type = :quad))),
-    ("structured_tris",       AirfoilMesh{Structured}(  AoA = AoA, MS = MeshSize(meshref = meshref, element_type = :tri))),
-    ("unstructured_BL_quads", AirfoilMesh{Unstructured}(AoA = AoA, MS = MeshSize(BL_fl = 1e-4, BL_tt = 0.01, meshref = meshref, element_type = :quad))),
-    ("unstructured_BL_tris",  AirfoilMesh{Unstructured}(AoA = AoA, MS = MeshSize(BL_fl = 1e-4, BL_tt = 0.01, meshref = meshref, element_type = :tri))),
-]
-
-# ---------------------------------------------------------------------------
-# Run
-# ---------------------------------------------------------------------------
-results = Dict{String,Any}()
-for (tag, meshinfo) in configs
-    @info "================  Sensitivity: $tag  ================"
-    grad, CDCL = sensitivity_for_mesh(meshinfo; tag = tag)
-    results[tag] = (grad = grad, CDCL = CDCL)
-    println("$tag  ->  CD = $(round(CDCL[1], digits = 5)) , CL = $(round(CDCL[2], digits = 5))")
-    println("   dJ/dβ = ", round.(grad, digits = 6))
-end
-
-results
+plot(grad)
+scatter!(fd)

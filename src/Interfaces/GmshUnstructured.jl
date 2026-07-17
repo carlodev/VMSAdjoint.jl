@@ -1,7 +1,13 @@
 
 
 
-function create_unstructured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign, iter::Int64, chord::Real, folder::String)
+"""
+    build_unstructured_msh(am, airfoil_design, iter, chord, folder)
+
+Build an unstructured mesh with a boundary layer around the airfoil. Must run
+inside a Gmsh session (see [`with_gmsh`](@ref)); returns the written `.msh` file path.
+"""
+function build_unstructured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign, iter::Int64, chord::Real, folder::String)
 
     function split_splines_points(airfoil_points::AirfoilPoints, AoA::Float64; pos=0.065, chord = 1.0)
          
@@ -26,12 +32,9 @@ function create_unstructured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,
     
 
     airfoil_points = airfoil_design.ap
-    @unpack  Lback, H, meshref,BL_fl,BL_tt, airfoil_divisions, element_type = am.MS
+    @unpack  Lback, H, meshref,BL_fl,BL_tt, airfoil_divisions = am.MS
     @unpack AoA = am
-    want_quads = element_type == :quad
 
-    gmsh.initialize()
-    
     rpoint = 0.005
     gmsh.model.add("Model1")
     Lback = Lback*chord
@@ -124,7 +127,7 @@ function create_unstructured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,
     gmsh.model.mesh.field.setNumber(1, "SizeFar", 0.01) 
     gmsh.model.mesh.field.setNumber(1, "Thickness", BL_tt)    # total thickness
     gmsh.model.mesh.field.setNumber(1, "Ratio", 1.12)          # growth rate
-    gmsh.model.mesh.field.setNumber(1, "Quads", want_quads ? 1 : 0)
+    gmsh.model.mesh.field.setNumber(1, "Quads", 0) # unstructured meshes are TRI-only: a quad BL inside a tri mesh is a mixed mesh GridapGmsh cannot read
     
     # gmsh.model.mesh.field.setNumbers(1, "FanPointsList", [trailing])
     # gmsh.option.setNumber("Mesh.BoundaryLayerFanElements", 11)
@@ -133,7 +136,11 @@ function create_unstructured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,
     gmsh.model.mesh.field.setAsBoundaryLayer(1)
 
 
-    # Create the Box field (Field[2])
+    # Wake-refinement Box field (Field[2]); the ONLY background size field.
+    # The BoundaryLayer field must NOT be part of the background sizing: it is
+    # applied through setAsBoundaryLayer above, and evaluating it as a size field
+    # is Gmsh-version-dependent — on 4.14-git its SizeFar leaks over the whole
+    # domain, inflating the mesh from ~36k to ~4.9M elements.
     gmsh.model.mesh.field.add("Box", 2)
     gmsh.model.mesh.field.setNumber(2, "VIn", 0.03)
     gmsh.model.mesh.field.setNumber(2, "VOut", 0.5)
@@ -141,36 +148,13 @@ function create_unstructured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,
     gmsh.model.mesh.field.setNumber(2, "XMax", 3.0)
     gmsh.model.mesh.field.setNumber(2, "YMin", -0.25)
     gmsh.model.mesh.field.setNumber(2, "YMax", 0.35)
-    
 
-
-    # If you already had Field[1] for boundary layer, you can combine:
-    gmsh.model.mesh.field.add("Min", 3)
-    gmsh.model.mesh.field.setNumbers(3, "FieldsList", [1, 2])
-
-    # Set background mesh field
-    gmsh.model.mesh.field.setAsBackgroundMesh(3)
+    gmsh.model.mesh.field.setAsBackgroundMesh(2)
 
 
     gmsh.model.geo.synchronize()
 
-    if want_quads
-        # Force a *pure quad* mesh. RecombineAll is best-effort and often leaves
-        # stray triangles at the BL/wake transition, producing a hybrid mesh that
-        # GridapGmsh cannot read (it needs a single 2D cell type). SubdivisionAlgorithm=1
-        # subdivides every remaining triangle into quads, guaranteeing an all-quad mesh.
-        gmsh.option.setNumber("Mesh.RecombineAll", 1)
-        gmsh.option.setNumber("Mesh.RecombinationAlgorithm", 1) # blossom
-        gmsh.option.setNumber("Mesh.SubdivisionAlgorithm", 1)   # 1 = all-quads
-    else
-        # Pure triangular mesh: single cell type, most robust for GridapGmsh.
-        gmsh.option.setNumber("Mesh.RecombineAll", 0)
-        gmsh.option.setNumber("Mesh.SubdivisionAlgorithm", 0)
-    end
 
-    gmsh.model.geo.synchronize()
-
-    
     #Points
     
     gmsh.model.addPhysicalGroup(0, [airfoil_gmsh_points[end],airfoil_gmsh_points[1],trailing], -1, "airfoil")
@@ -186,16 +170,7 @@ function create_unstructured_msh(am::AirfoilMesh, airfoil_design::AirfoilDesign,
     # #Surfaces
     gmsh.model.addPhysicalGroup(2,[1],-1, "fluid")
     
-    mkpath(folder)
-
     gmsh.model.geo.synchronize()
 
-    mesh_filename = joinpath(folder,"Mesh$iter.msh")
-
-    
-    gmsh.model.mesh.generate(2)
-    
-    gmsh.write(mesh_filename)
-    gmsh.finalize()
-    return mesh_filename
+    return generate_and_write_msh(folder, iter)
 end

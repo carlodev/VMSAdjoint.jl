@@ -1,191 +1,140 @@
-# Main entry point
+#############################################################################
+# Adjoint incompressible Navier–Stokes solvers (steady / unsteady VMS)
+#############################################################################
+
+"""
+    solve_inc_adj(am, simcase, d_bc, [filename,] timed::Symbol, uh, ph)
+
+Solve the adjoint problem, `timed ∈ (:steady, :unsteady)`, with airfoil
+Dirichlet value `d_bc = -dJ/d[CD,CL]` and primal solution `(uh, ph)`.
+When `filename` is omitted it defaults to `"inc-adj-<timed>"`.
+Returns the adjoint fields `(ϕu, ϕp)`; for `:unsteady` these are time-averaged,
+and the time-averaged wall-shear correlation is stored in `am.params[:wall_shear_corr]`.
+"""
 function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, d_bc::Vector{Float64}, timed::Symbol, uh, ph)
-    solve_inc_adj(am, simcase,d_bc, Val(timed), uh, ph)
+    solve_inc_adj(am, simcase, d_bc, "inc-adj-$timed", timed, uh, ph)
 end
 
 function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, d_bc::Vector{Float64}, filename::String, timed::Symbol, uh, ph)
-    solve_inc_adj(am, simcase,d_bc, filename, Val(timed), uh, ph)
+    if timed === :steady
+        solve_inc_adj_steady(am, simcase, d_bc, filename, uh, ph)
+    elseif timed === :unsteady
+        solve_inc_adj_unsteady(am, simcase, d_bc, filename, uh, ph)
+    else
+        throw(ArgumentError("timed must be :steady or :unsteady, got :$timed"))
+    end
 end
 
-function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, d_bc::Vector{Float64}, filename::String,  ::Val{:steady}, uh, ph)
-    solve_inc_adj_steady(am, simcase,d_bc, filename,  uh, ph)
-end
-
-
-function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, d_bc::Vector{Float64}, ::Val{:steady}, uh, ph)
-    filename = "inc-adj-steady"
-    return solve_inc_adj_steady(am, simcase,d_bc, filename,uh,ph)
-end
-
-function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, d_bc::Vector{Float64}, filename::String,  ::Val{:unsteady}, uh, ph)
-    solve_inc_adj_unsteady(am, simcase,d_bc, filename,  uh, ph)
-end
-
-
-function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, d_bc::Vector{Float64}, ::Val{:unsteady}, uh, ph)
-    filename = "inc-adj-unsteady"
-    return solve_inc_adj_unsteady(am, simcase,d_bc, filename,uh,ph)
-end
-
-
-
-# function solve_inc_adj(am::AirfoilModel, simcase::Airfoil, ::Val{:unsteady}; uh0=nothing, ph0=nothing)
-#     filename = "inc-primal-unsteady"
-#     return solve_inc_primal_unsteady(am, simcase, filename, uh0, ph0)
-# end
-
-
-
+#############################################################################
+# Spaces and measures
+#############################################################################
 
 function create_adjoint_spaces(model, simcase::Airfoil)
-    @sunpack  order, D = simcase
+    @sunpack order, D = simcase
     reffe_u_adj = ReferenceFE(lagrangian, VectorValue{D,Float64}, order)
-    V_adj = TestFESpace(model, reffe_u_adj, conformity=:H1, dirichlet_tags=["airfoil", "outlet","limits"], dirichlet_masks=[(true,true), (true,true),(false,true) ])
+    V_adj = TestFESpace(model, reffe_u_adj, conformity=:H1,
+        dirichlet_tags=["airfoil", "outlet", "limits"],
+        dirichlet_masks=[(true, true), (true, true), (false, true)])
     reffe_p_adj = ReferenceFE(lagrangian, Float64, order)
     Q_adj = TestFESpace(model, reffe_p_adj, conformity=:H1, dirichlet_tags="inlet")
-   
-    return V_adj,Q_adj
+
+    return V_adj, Q_adj
 end
 
-function solve_inc_adj_steady(am::AirfoilModel, simcase::Airfoil,d_boundary::Vector{Float64}, filename, uh,ph)
-    
-    @unpack params,model = am
+"""
+    register_boundary_measures!(params, model, order)
+
+Register in `params` the measures and normals of the outer/airfoil boundaries
+(`:dΓout/:nΓout`, `:dΓlim/:nΓlim`, `:dΓairfoil/:nΓairfoil`).
+"""
+function register_boundary_measures!(params::Dict{Symbol,Any}, model, order::Int)
+    for (tag, suffix) in (("outlet", "out"), ("limits", "lim"), ("airfoil", "airfoil"))
+        Γ = BoundaryTriangulation(model; tags=tag)
+        updatekey(params, Symbol(:dΓ, suffix), Measure(Γ, 2 * order))
+        updatekey(params, Symbol(:nΓ, suffix), get_normal_vector(Γ))
+    end
+end
+
+#############################################################################
+# Steady solver
+#############################################################################
+
+function solve_inc_adj_steady(am::AirfoilModel, simcase::Airfoil, d_boundary::Vector{Float64}, filename, uh, ph)
+    @unpack params, model = am
     @unpack Ω = params
     @sunpack order = simcase
 
+    register_boundary_measures!(params, model, order)
 
-    Γout = BoundaryTriangulation(model; tags="outlet")
-    dΓout = Measure(Γout, order*2)
-    nΓout =  get_normal_vector(Γout)
+    V_adj, Q_adj = create_adjoint_spaces(model, simcase)
+    @info "Solving Steady Adjoint, airfoil boundary condition: $d_boundary"
 
-    Γlim = BoundaryTriangulation(model; tags="limits")
-    dΓlim = Measure(Γlim, order*2)
-    nΓlim =  get_normal_vector(Γlim)
-
-    Γairfoil = BoundaryTriangulation(model; tags="airfoil")
-    dΓairfoil = Measure(Γairfoil, order*2)
-    nΓairfoil = get_normal_vector(Γairfoil)
-
-
-    updatekey(params, :dΓout,dΓout)
-    updatekey(params, :nΓout,nΓout)
-
-    updatekey(params, :dΓlim,dΓlim)
-    updatekey(params, :nΓlim,nΓlim)
-    
-    updatekey(params, :dΓairfoil,dΓairfoil)
-    updatekey(params, :nΓairfoil,nΓairfoil)
-
-    V_adj,Q_adj = create_adjoint_spaces(model, simcase)
-    println("Adjoint Boundary condition value: $d_boundary")
-
-    U_adj = TrialFESpace(V_adj, [VectorValue(d_boundary...), VectorValue(0, 0),VectorValue(0, 0)])
-    P_adj = TrialFESpace(Q_adj,0.0)
+    U_adj = TrialFESpace(V_adj, [VectorValue(d_boundary...), VectorValue(0, 0), VectorValue(0, 0)])
+    P_adj = TrialFESpace(Q_adj, 0.0)
 
     Y_adj = MultiFieldFESpace([V_adj, Q_adj])
     X_adj = MultiFieldFESpace([U_adj, P_adj])
 
-    updatekey(params, :uh,uh)
-    updatekey(params, :ph,ph)
+    updatekey(params, :uh, uh)
+    updatekey(params, :ph, ph)
 
-    res_adj, rhs_adj = equations_adjoint(simcase,params,:steady)
-
-
+    res_adj, rhs_adj = equations_adjoint(simcase, params, :steady)
     op_adj = AffineFEOperator(res_adj, rhs_adj, X_adj, Y_adj)
 
-    ls = LUSolver()
-    solver = LinearFESolver(ls)
-
+    solver = LinearFESolver(LUSolver())
     ϕu, ϕp = Gridap.solve(solver, op_adj)
-    
-    @info "Solving Steady Adjoint ..."
+
     res_path = "Results_adj"
     mkpath(res_path)
 
     if !isnothing(filename)
-        writevtk(Ω, joinpath(res_path, "$(filename)" * ".vtu"), nsubcells=order, cellfields=["phi-u" => ϕu, "phi-p" => ϕp, "uh" => uh, "ph" => ph])
+        writevtk(Ω, joinpath(res_path, "$filename.vtu"); nsubcells=order,
+            cellfields=["phi-u" => ϕu, "phi-p" => ϕp, "uh" => uh, "ph" => ph])
     end
 
     return ϕu, ϕp
 end
 
+#############################################################################
+# Unsteady solver
+#############################################################################
 
+function solve_inc_adj_unsteady(am::AirfoilModel, simcase::Airfoil, d_boundary::Vector{Float64}, filename, uh, ph)
+    @unpack params, model = am
+    @sunpack D, order, t0, tF, θ, dt, time_window = simcase
+    @unpack Ω, UH = params
 
-function solve_inc_adj_unsteady(am::AirfoilModel, simcase::Airfoil,d_boundary::Vector{Float64}, filename, uh,ph)
-    
-    @unpack params,model = am
-    @sunpack order = simcase
+    register_boundary_measures!(params, model, order)
 
-    @sunpack D,order,t_endramp,t0,tF,θ,dt,u_in,time_window = simcase
-    @sunpack M = simcase #here now M is the step to save .vtu files
-    @unpack Ω,UH = params
+    V_adj, Q_adj = create_adjoint_spaces(model, simcase)
+    @info "Solving Unsteady Adjoint, airfoil boundary condition: $d_boundary"
 
+    u0 = ConstantInTime(VectorValue(d_boundary...))
+    u_walls = ConstantInTime(VectorValue(zeros(D)...))
+    p0 = ConstantInTime(0.0)
 
-    Γout = BoundaryTriangulation(model; tags="outlet")
-    dΓout = Measure(Γout, order*2)
-    nΓout =  get_normal_vector(Γout)
-
-    Γlim = BoundaryTriangulation(model; tags="limits")
-    dΓlim = Measure(Γlim, order*2)
-    nΓlim =  get_normal_vector(Γlim)
-
-    Γairfoil = BoundaryTriangulation(model; tags="airfoil")
-    dΓairfoil = Measure(Γairfoil, order*2)
-    nΓairfoil = get_normal_vector(Γairfoil)
-
-
-    updatekey(params, :dΓout,dΓout)
-    updatekey(params, :nΓout,nΓout)
-
-    updatekey(params, :dΓlim,dΓlim)
-    updatekey(params, :nΓlim,nΓlim)
-    
-    updatekey(params, :dΓairfoil,dΓairfoil)
-    updatekey(params, :nΓairfoil,nΓairfoil)
-
-    V_adj,Q_adj = create_adjoint_spaces(model, simcase)
-    println("Adjoint Boundary condition value: $d_boundary")
-    
-    
-    u0(x,t) = VectorValue(d_boundary...)
-    u0(t::Real) = x -> u0(x,t)
-
-    u_walls(x,t) = VectorValue(zeros(D)...) 
-    u_walls(t::Real) = x -> u_walls(x,t)
-
-    p0(x,t) = 0.0
-    p0(t::Real) = x -> p0(x,t)
-
-
-    U_adj = TransientTrialFESpace(V_adj, [u0, u_walls,u_walls])
-    P_adj = TransientTrialFESpace(Q_adj,p0)
+    U_adj = TransientTrialFESpace(V_adj, [u0, u_walls, u_walls])
+    P_adj = TransientTrialFESpace(Q_adj, p0)
 
     Y_adj = MultiFieldFESpace([V_adj, Q_adj])
     X_adj = MultiFieldFESpace([U_adj, P_adj])
 
     uh0_adj = interpolate(u0(0.0), U_adj(0.0))
     ph0_adj = interpolate(p0(0.0), P_adj(0.0))
-    copyto!(am.params[:uh].free_values, UH[end])
 
+    # the adjoint marches backward: start from the LAST primal state
+    copyto!(params[:uh].free_values, UH[end])
 
     xh0_adj = interpolate([uh0_adj, ph0_adj], X_adj(0.0))
 
-
-    m_adj, res_adj, rhs_adj =  equations_adjoint( simcase, am.params,:unsteady)
-
+    m_adj, res_adj, rhs_adj = equations_adjoint(simcase, params, :unsteady)
     op_adj = TransientLinearFEOperator((res_adj, m_adj), rhs_adj, X_adj, Y_adj)
 
-    ls = LUSolver()
-
-    println("Solve Unsteady Adjoint")
-
-    ode_solver = ThetaMethod(ls,dt,θ)
-
+    ode_solver = ThetaMethod(LUSolver(), dt, θ)
     sol = Gridap.solve(ode_solver, op_adj, t0, tF, xh0_adj)
 
     UH_ADJ = [copy(uh0_adj.free_values)]
     PH_ADJ = [copy(ph0_adj.free_values)]
-    
 
     res_path = "Results_unsteady_primal"
     mkpath(res_path)
@@ -194,53 +143,65 @@ function solve_inc_adj_unsteady(am::AirfoilModel, simcase::Airfoil,d_boundary::V
     t_length = length(time_vec)
 
     createpvd(filename) do pvd
-        pvd[time_vec[end]] = createvtk(Ω, nsubcells = order, joinpath(res_path, "$(filename)_$tF" * ".vtu"), cellfields=["uh-adj" => uh0_adj, "ph-adj" => ph0_adj])
-        for (idx,(t, xhtn)) in enumerate(sol)
-            ϕu = xhtn[1]
-            ϕp = xhtn[2]
-            
+        pvd[time_vec[end]] = createvtk(Ω, joinpath(res_path, "$(filename)_$tF.vtu");
+            nsubcells=order, cellfields=["uh-adj" => uh0_adj, "ph-adj" => ph0_adj])
+        for (idx, (t, xhtn)) in enumerate(sol)
+            ϕu, ϕp = xhtn
+
             push!(UH_ADJ, copy(ϕu.free_values))
             push!(PH_ADJ, copy(ϕp.free_values))
 
-            idx_adj = Int(t_length - idx)
+            # adjoint pseudo-time t maps to physical time t_adj = tF - t
+            idx_adj = t_length - idx
             t_adj = time_vec[idx_adj]
 
-            idx_adj > 0 ? copyto!(am.params[:uh].free_values,UH[idx_adj]) : nothing
+            # feed the primal state at the SAME physical time into the adjoint operator
+            idx_adj > 0 && copyto!(params[:uh].free_values, UH[idx_adj])
 
             println("Adjoint solved at time step $t_adj")
-                   
 
-            if true #mod(idx,M)==0
-                pvd[t_adj] = createvtk(Ω, nsubcells = order, joinpath(res_path, "$(filename)_$t_adj" * ".vtu"), cellfields=["uh-adj" => ϕu, "ph-adj" => ϕp])
-            end
-
+            pvd[t_adj] = createvtk(Ω, joinpath(res_path, "$(filename)_$t_adj.vtu");
+                nsubcells=order, cellfields=["uh-adj" => ϕu, "ph-adj" => ϕp])
         end
     end
 
-    jldsave("UnsteadyAdjointFields.jld2"; UH_ADJ,PH_ADJ)
+    jldsave("UnsteadyAdjointFields.jld2"; UH_ADJ, PH_ADJ)
 
-    time_window_adj = (tF - time_window[1], tF - 10*dt)
-
+    # average over the (reversed) physical window, skipping the adjoint start-up
+    time_window_adj = (tF - time_window[1], tF - 10 * dt)
     @assert time_window_adj[2] > time_window_adj[1] "Adjoint Time Window Averaging not consistent"
 
-    avg_UH_ADJ,avg_PH_ADJ = time_average_fields(UH_ADJ,PH_ADJ, time_window_adj,dt, t0)
+    avg_UH_ADJ, avg_PH_ADJ = time_average_fields(UH_ADJ, PH_ADJ, time_window_adj, dt, t0)
+    uh0_adj.free_values .= avg_UH_ADJ
+    ph0_adj.free_values .= avg_PH_ADJ
 
-    uh0_adj.free_values .=  avg_UH_ADJ
-    ph0_adj.free_values .=  avg_PH_ADJ
+    store_wall_shear_correlation!(am, simcase, U_adj(0.0), UH, UH_ADJ, time_vec)
 
+    return uh0_adj, ph0_adj
+end
 
-    # --- Covariance-correct unsteady sensitivity seed (Srinath & Mittal, JCP 2010) ---
-    # Build the time-AVERAGED wall-shear product  S = ⟨(∂v_t/∂n)(∂ψ_t/∂n)⟩  over the
-    # physical averaging window, pairing primal v(t) and adjoint ψ(t) at the SAME
-    # physical time. Storing S (rather than multiplying the two time-averaged fields)
-    # keeps the primal–adjoint covariance term; compute_gradient then only needs
-    # ∫_Γ ν S δβ dΓ per design parameter.
-    # The primal is rebuilt on the test space (airfoil no-slip ⇒ homogeneous Dirichlet),
-    # the adjoint on the trial space at t=0 (airfoil Dirichlet = d_boundary, constant in t).
-    @unpack tΓ, nΓ = params
+"""
+    store_wall_shear_correlation!(am, simcase, Uadj0, UH, UH_ADJ, time_vec)
+
+Covariance-correct unsteady sensitivity seed (Srinath & Mittal, JCP 2010).
+
+Builds the time-AVERAGED wall-shear product `S = ⟨(∂v_t/∂n)(∂ψ_t/∂n)⟩` over the
+physical averaging window, pairing primal `v(t)` and adjoint `ψ(t)` at the SAME
+physical time, and stores it in `am.params[:wall_shear_corr]`. Storing `S`
+(rather than multiplying the two time-averaged fields) keeps the primal–adjoint
+covariance term; `compute_gradient` then only needs `∫_Γ ν S δβ dΓ` per design
+parameter.
+
+The primal is rebuilt on the test space (airfoil no-slip ⇒ homogeneous Dirichlet),
+the adjoint on the trial space at t=0 (airfoil Dirichlet constant in time).
+"""
+function store_wall_shear_correlation!(am::AirfoilModel, simcase::Airfoil, Uadj0, UH, UH_ADJ, time_vec)
+    @unpack params, model = am
+    @unpack nΓ = params
+    @sunpack tF, dt, time_window = simcase
+
     V_prim, _ = create_primal_spaces(model, simcase)
-    Uadj0 = U_adj(0.0)
-    ∂ₜ∂n(u) = (∇(u) ⋅ tΓ) ⋅ nΓ
+    ∂ₙᵗ(u) = tangential_normal_derivative(u, nΓ)
 
     # skip the last 10*dt near tF: that is the adjoint start-up transient
     t_hi = min(time_window[2], tF - 10 * dt)
@@ -248,12 +209,12 @@ function solve_inc_adj_unsteady(am::AirfoilModel, simcase::Airfoil,d_boundary::V
     @assert !isempty(win) "Sensitivity averaging window contains no time step"
 
     # physical index j: primal = UH[j], adjoint = UH_ADJ[t_length - j + 1]
+    t_length = length(time_vec)
     wall_shear_products = map(win) do j
         v_j = FEFunction(V_prim, UH[j])
-        ψ_j = FEFunction(Uadj0,  UH_ADJ[t_length-j+1])
-        ∂ₜ∂n(v_j) * ∂ₜ∂n(ψ_j)
+        ψ_j = FEFunction(Uadj0, UH_ADJ[t_length-j+1])
+        ∂ₙᵗ(v_j) ⋅ ∂ₙᵗ(ψ_j)
     end
-    updatekey(params, :wall_shear_corr, sum(wall_shear_products) / length(wall_shear_products))
 
-    return uh0_adj, ph0_adj
+    updatekey(params, :wall_shear_corr, sum(wall_shear_products) / length(wall_shear_products))
 end

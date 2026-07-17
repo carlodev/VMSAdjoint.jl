@@ -20,6 +20,7 @@ using JLD2
 
 
 export solve_inc_primal
+export tangential_normal_derivative
 include("SolvePrimal.jl")
 
 export solve_inc_adj

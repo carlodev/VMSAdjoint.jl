@@ -3,7 +3,6 @@ module IteratorTools
 using Parameters
 using Gridap
 using GridapGmsh
-import Gmsh: gmsh
 using Gridap.FESpaces
 using Gridap.CellData:OperationCellField, GenericMeasure
 using SegregatedVMSSolver.ParametersDef
@@ -16,7 +15,6 @@ using JLD2
 using NLopt
 # using Optim
 using LineSearches
-using KissSmoothing
 
 using Interpolations
 using ForwardDiff
@@ -28,7 +26,7 @@ export thickness_penalty
 include("ObjectiveFunctions.jl")
 
 export regularize_airfoil
-export generate_regularized_model
+export generate_model
 include("RegularizationTools.jl")
 
 export compute_sensitivity
