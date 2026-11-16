@@ -29,6 +29,24 @@ function boundary_outward_normals(model, tag::String)
     return _point_data(n_Γ.trian, Dict("n_Γ" => n_Γ))["n_Γ"]
 end
 
+"""
+    airfoil_boundary!(am::AirfoilModel, order::Int)
+
+Return `(dΓ, nΓ)` of the airfoil boundary, with `nΓ` pointing outward from the
+body, registering `:Γ/:dΓ/:nΓ` in `am.params` on first use. Single shared
+construction for the force computation, the sensitivity kernel and the solvers.
+"""
+function airfoil_boundary!(am::AirfoilModel, order::Int)
+    params = am.params
+    if !haskey(params, :dΓ)
+        Γ = BoundaryTriangulation(am.model; tags="airfoil")
+        updatekey(params, :Γ, Γ)
+        updatekey(params, :dΓ, Measure(Γ, 2 * order))
+        updatekey(params, :nΓ, -get_normal_vector(Γ)) # sign flip: Gridap normals point into the body
+    end
+    return params[:dΓ], params[:nΓ]
+end
+
 #############################################################################
 # Airfoil point/normal identification
 #############################################################################
@@ -113,7 +131,10 @@ function get_normals(model, params, tag)
 end
 
 function ParametersAdj.AirfoilModel(model, mcase::Airfoil; tag="airfoil")
-    @sunpack AoA = mcase
+    @sunpack AoA, D = mcase
+    D == 2 || throw(ArgumentError(
+        "3D meshes are not yet supported: mesh generation and airfoil surface " *
+        "extraction are 2D-only (the solver and sensitivity kernels are dimension-generic)."))
     nodesu, nodesl, params = get_nodes_idx(model, AoA, tag)
 
     ap = AirfoilPoints(getindex.(nodesu, 1), getindex.(nodesl, 1), getindex.(nodesu, 2), getindex.(nodesl, 2))
@@ -128,14 +149,16 @@ end
 #############################################################################
 
 """
-    get_aerodynamic_features(am::AirfoilModel, uh, ph; tag="airfoil")
+    get_aerodynamic_features(am::AirfoilModel, physicalp::PhysicalParameters, uh, ph; tag="airfoil")
 
-Pressure coefficient distribution on the top/bottom airfoil surfaces.
+Pressure coefficient distribution on the top/bottom airfoil surfaces,
+normalized by the dynamic-pressure reference of `physicalp` (consistent with
+`compute_airfoil_coefficients`).
 """
-function get_aerodynamic_features(am::AirfoilModel, uh, ph; tag="airfoil")
+function get_aerodynamic_features(am::AirfoilModel, physicalp::PhysicalParameters, uh, ph; tag="airfoil")
     @unpack IDX_TOP_UNIQUE, IDX_BOTTOM_UNIQUE = am.params
-    u_in = 1.0
-    q = 0.5 * u_in^2
+    @unpack c, u_in_mag = physicalp
+    q = 0.5 * c * u_in_mag^2
 
     Γ = BoundaryTriangulation(am.model; tags=tag)
     visgrid = _visualization_grid(Γ.trian)
@@ -145,4 +168,45 @@ function get_aerodynamic_features(am::AirfoilModel, uh, ph; tag="airfoil")
     cp_bottom = pdata["ph"][IDX_BOTTOM_UNIQUE] ./ q
 
     return AirfoilScalar(cp_top, cp_bottom)
+end
+
+"""
+    get_aerodynamic_features(am::AirfoilModel, physicalp::PhysicalParameters, uh; tag="airfoil")
+
+Skin-friction coefficient distribution on the top/bottom airfoil surfaces
+(the pressure is not needed, hence the shorter argument list: `uh, ph` gives Cp,
+`uh` alone gives Cf).
+
+The wall shear is the tangential part of the viscous traction,
+
+    τ_w = (I - n ⊗ n) ⋅ [ν (∇u + ∇uᵀ) ⋅ n],
+
+i.e. the viscous term of [`compute_airfoil_forces`](@ref) with its normal
+component removed, normalized by the same dynamic-pressure reference as the Cp
+method. The sign comes from the projection of `τ_w` on the freestream
+direction, so `cf < 0` marks reversed (separated) flow. Like
+[`tangential_normal_derivative`](@ref), the projector form carries over to 3D,
+where `|τ_w|` also picks up the spanwise shear.
+"""
+function get_aerodynamic_features(am::AirfoilModel, physicalp::PhysicalParameters, uh; tag="airfoil")
+    @unpack IDX_TOP_UNIQUE, IDX_BOTTOM_UNIQUE = am.params
+    @unpack c, u_in, u_in_mag, ν = physicalp
+    q = 0.5 * c * u_in_mag^2
+
+    Γ = BoundaryTriangulation(am.model; tags=tag)
+    nΓ = -get_normal_vector(Γ) # sign flip: Gridap normals point into the body
+    tν = ν * (∇(uh) + transpose(∇(uh))) ⋅ nΓ # viscous traction, as in compute_airfoil_forces
+    τw = tν - (tν ⋅ nΓ) * nΓ
+
+    visgrid = _visualization_grid(Γ.trian)
+    pdata = _point_data(Γ, Dict("τw" => τw), visgrid)
+
+    D = num_cell_dims(am.model)
+    ê = VectorValue(ntuple(i -> i <= length(u_in) ? u_in[i] : 0.0, D)) / u_in_mag
+    cf(τ) = sign(τ ⋅ ê) * norm(τ) / q
+
+    cf_top = cf.(pdata["τw"][IDX_TOP_UNIQUE])
+    cf_bottom = cf.(pdata["τw"][IDX_BOTTOM_UNIQUE])
+
+    return AirfoilScalar(cf_top, cf_bottom)
 end

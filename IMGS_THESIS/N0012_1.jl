@@ -1,3 +1,5 @@
+using Plots
+
 using AirfoilTools
 using AirfoilTools.AirfoilCST
 using VMSAdjoint
@@ -26,46 +28,38 @@ rbfd = RBFDesign(rbfg, ap0)
 
 
 
-using Plots
 
-cst1 = perturb_DesignParameter(rbfd, 25, 0.3)
+cst1 = perturb_DesignParameter(rbfd, 2, 0.023)
+Plots.default(lw=2)
 
-plot(ap0.xu, ap0.yu, lc=:white)
-plot!(ap0.xl, ap0.yl, lc=:white )
+plot(ap0.xu, ap0.yu,lw=4, lc=:black,label="original")
+plot!(ap0.xl, ap0.yl,lw=4, lc=:black, label=false )
+plot!(cst1.ap.xu, cst1.ap.yu, lc=:red,label="perturbed")
+plot!(cst1.ap.xl, cst1.ap.yl, lc=:red, label=false )
+plot!(ylabel="y/c", xlabel="x/c")
+plot!(axis = true,
+grid = true,
+aspect_ratio = :equal,
+legendfontsize = 12,tickfontsize = 12,guidefontsize = 12,
+)
 
-scatter!(control_px, rbfd.cy.cu, markershape=:circle, markercolor=:white)
-scatter!(control_px, rbfd.cy.cl, markershape=:circle, markercolor=:white)
-
-for i in eachindex(control_px)
-    annotate!(control_px[i], rbfd.cy.cu[i]+ 0.01, text("$i", 8, :white, :bottom))
-    annotate!(control_px[i], rbfd.cy.cl[i]-0.01, text("$(i + 20)", 8, :white, :top))
-end
+savefig("NACA0012_Perturbed_d2.svg")
+savefig("NACA0012_Perturbed_d2.pdf")
 
 
-plot(cst1.ap.xu, cst1.ap.yu, lc=:white)
-plot!(cst1.ap.xl, cst1.ap.yl, lc=:white )
+
+plot(ap0.xu, ap0.yu,lw=4, lc=:black,label=false)
+scatter!(control_px, rbfd.cy.cu, markershape=:circle, markercolor=:black, label="control points")
+
+
+plot!(cst1.ap.xu, cst1.ap.yu, lc=:red,label=false)
 plot!(axis = false,
 grid = false,
-legend = false,
-background_color = :transparent,
-foreground_color = :transparent,
-ticks = nothing,
-border = :none,
-aspect_ratio = :equal
+aspect_ratio = :equal,
+legendfontsize = 16,tickfontsize = 12,guidefontsize = 12,
 )
+plot!(xlims=[0.0, 0.25])
 
-savefig("Non-Physical.svg")
+savefig("NACA0012_Perturbed_detail.svg")
+savefig("NACA0012_Perturbed_detail.pdf")
 
-
-x = collect(1:0.01:5)
-y(x) = sin(2.5*x) + log(x)
-
-
-plot(x,y.(x), lw=3, lc=:green1)
-
-plot!(
-legend = false,
-background_color = :transparent,
-foreground_color = :transparent,
-aspect_ratio = :equal
-)

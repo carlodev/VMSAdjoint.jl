@@ -48,26 +48,76 @@ function tangential_normal_derivative(u, nΓ)
 end
 
 #############################################################################
+# Dimension-generic boundary-condition helpers
+#############################################################################
+
+"Dirichlet mask constraining every velocity component."
+full_mask(D::Int) = ntuple(_ -> true, D)
+
+"Dirichlet mask constraining only the wall-normal (y) component: free-slip lateral boundaries."
+wall_normal_mask(D::Int) = ntuple(i -> i == 2, D)
+
+"""
+    boundary_vector(vals, D)
+
+`VectorValue{D}` from the (possibly shorter) vector `vals`, zero-padding the
+remaining components. Used to build D-dimensional Dirichlet values from the
+2-component adjoint boundary condition `-dJ/d[CD,CL]` (the spanwise component
+is zero in 3D).
+"""
+boundary_vector(vals::AbstractVector{<:Real}, D::Int) =
+    VectorValue(ntuple(i -> i <= length(vals) ? Float64(vals[i]) : 0.0, D))
+
+"""
+    set_free_values!(fh, fh0, name)
+
+Copy the free values of `fh0` into `fh` when `fh0` is provided and the DOF
+counts match; warn and keep `fh` unchanged on a mismatch (e.g. warm-starting
+across a remeshing that changed the number of DOFs). Returns whether the copy
+happened.
+"""
+function set_free_values!(fh, fh0, name::String)
+    isnothing(fh0) && return false
+    n, n0 = length(fh.free_values), length(fh0.free_values)
+    if n == n0
+        fh.free_values .= fh0.free_values
+        return true
+    end
+    @warn "Skipping initial values for $name: DOF count changed ($n0 -> $n)"
+    return false
+end
+
+#############################################################################
 # Entry points
 #############################################################################
 
 """
-    solve_inc_primal(am, simcase, [filename,] timed::Symbol; uh0=nothing, ph0=nothing)
+    solve_inc_primal(am, simcase, [filename,] timed::Symbol; uh0=nothing, ph0=nothing, linear_backend=:cpu, picard_iters=nothing)
 
 Solve the primal incompressible flow problem, `timed ∈ (:steady, :unsteady)`.
 When `filename` is omitted it defaults to `"inc-primal-<timed>"`.
+`linear_backend ∈ (:cpu, :gpu)` selects the linear solver (see [`linear_solver`](@ref)).
 Returns `(uh, ph)`; for `:unsteady` these are the time-averaged fields over
 `time_window`, and the full history is stored in `am.params[:UH]/[:PH]`.
+
+`picard_iters` overrides how many Picard sweeps the STEADY solver takes. It
+exists because the two solvers want opposite things from
+`SolverParameters.matrix_freq_update`, which used to drive both: the transient
+solver wants it SMALL (a stale linearization is refreshed often), the steady
+solver wants it LARGE (that is its iteration count). Any run that needs a
+converged steady state *and* a cheap transient — E4's steady/steady leg does —
+must set the two independently. `nothing` keeps the historical behaviour of
+taking the count from `matrix_freq_update`; ignored when `timed = :unsteady`.
 """
-function solve_inc_primal(am::AirfoilModel, simcase::Airfoil, timed::Symbol; uh0=nothing, ph0=nothing)
-    solve_inc_primal(am, simcase, "inc-primal-$timed", timed; uh0=uh0, ph0=ph0)
+function solve_inc_primal(am::AirfoilModel, simcase::Airfoil, timed::Symbol; uh0=nothing, ph0=nothing, linear_backend::Symbol=:cpu, picard_iters::Union{Nothing,Int}=nothing)
+    solve_inc_primal(am, simcase, "inc-primal-$timed", timed; uh0=uh0, ph0=ph0, linear_backend=linear_backend, picard_iters=picard_iters)
 end
 
-function solve_inc_primal(am::AirfoilModel, simcase::Airfoil, filename::String, timed::Symbol; uh0=nothing, ph0=nothing)
+function solve_inc_primal(am::AirfoilModel, simcase::Airfoil, filename::String, timed::Symbol; uh0=nothing, ph0=nothing, linear_backend::Symbol=:cpu, picard_iters::Union{Nothing,Int}=nothing)
     if timed === :steady
-        solve_inc_primal_steady(am, simcase, filename, uh0, ph0)
+        solve_inc_primal_steady(am, simcase, filename, uh0, ph0, linear_backend, picard_iters)
     elseif timed === :unsteady
-        solve_inc_primal_unsteady(am, simcase, filename, uh0, ph0)
+        solve_inc_primal_unsteady(am, simcase, filename, uh0, ph0, linear_backend)
     else
         throw(ArgumentError("timed must be :steady or :unsteady, got :$timed"))
     end
@@ -82,12 +132,23 @@ function create_primal_spaces(model, simcase::Airfoil)
     reffeᵤ = ReferenceFE(lagrangian, VectorValue{D,Float64}, order)
     V = TestFESpace(model, reffeᵤ, conformity=:H1,
         dirichlet_tags=["inlet", "limits", "airfoil"],
-        dirichlet_masks=[(true, true), (false, true), (true, true)])
+        dirichlet_masks=[full_mask(D), wall_normal_mask(D), full_mask(D)])
     reffeₚ = ReferenceFE(lagrangian, Float64, order)
     Q = TestFESpace(model, reffeₚ, conformity=:H1, dirichlet_tags=["outlet"])
 
     return V, Q
 end
+
+"""
+    velocity_pressure_space(Vu, Qp, backend)
+
+Product velocity/pressure space, block-assembled for the `:block` backend and
+interleaved (Gridap's default) otherwise — see [`multifield_style`](@ref).
+Works for both plain and transient component spaces, since
+`TransientMultiFieldFESpace === MultiFieldFESpace`.
+"""
+velocity_pressure_space(Vu, Qp, backend::Symbol) =
+    MultiFieldFESpace([Vu, Qp]; style=multifield_style(backend))
 
 """
     setup_domain_measures!(am::AirfoilModel, order::Int)
@@ -106,29 +167,26 @@ end
     setup_shape_opt_spaces!(D, order, model, am)
 
 Register in `am.params` the geometric quantities needed by the shape-sensitivity
-kernel: interpolation space `VV0` and airfoil boundary measure/normal/tangent.
+kernel: interpolation space `VV0` and airfoil boundary measure/normal (via
+[`Interfaces.airfoil_boundary!`](@ref), shared with the force computation).
 """
 function setup_shape_opt_spaces!(D::Int64, order::Int64, model, am::AirfoilModel)
     reffe = ReferenceFE(lagrangian, VectorValue{D,Float64}, order)
     VV0 = FESpace(model, reffe; conformity=:H1)
 
-    Γ = BoundaryTriangulation(am.model; tags="airfoil")
-    dΓ = Measure(Γ, 2 * order)
-    nΓ = -get_normal_vector(Γ) # sign flip: Gridap normals point into the body
-
     updatekey(am.params, :reffe, reffe)
     updatekey(am.params, :VV0, VV0)
-    updatekey(am.params, :Γ, Γ)
-    updatekey(am.params, :dΓ, dΓ)
-    updatekey(am.params, :nΓ, nΓ)
+    airfoil_boundary!(am, order)
 end
 
 #############################################################################
 # Steady solver
 #############################################################################
 
-function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, uh00, ph00)
+function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, uh00, ph00, linear_backend::Symbol=:cpu, picard_iters::Union{Nothing,Int}=nothing)
     @sunpack D, order, u_in, matrix_freq_update = simcase
+    npicard = isnothing(picard_iters) ? matrix_freq_update : picard_iters
+    npicard >= 1 || throw(ArgumentError("picard_iters must be >= 1, got $npicard"))
     @unpack model = am
 
     V, Q = create_primal_spaces(model, simcase)
@@ -142,25 +200,50 @@ function solve_inc_primal_steady(am::AirfoilModel, simcase::Airfoil, filename, u
     updatekey(am.params, :U, U)
     updatekey(am.params, :P, P)
 
-    Y = MultiFieldFESpace([V, Q])
-    X = MultiFieldFESpace([U, P])
+    Y = velocity_pressure_space(V, Q, linear_backend)
+    X = velocity_pressure_space(U, P, linear_backend)
 
     setup_shape_opt_spaces!(D, order, model, am)
     Ω, _ = setup_domain_measures!(am, order)
 
-    solver = LinearFESolver(LUSolver())
+    # built after the measures: the :block backend assembles a pressure Schur
+    # approximation over dΩ
+    ctx = solver_context(simcase, am.params, P, Q; transient=false)
+    solver = LinearFESolver(linear_solver(linear_backend, ctx))
 
     uh = interpolate(u0, U)
     ph = interpolate(0.0, P)
 
-    isnothing(uh00) || (uh.free_values .= uh00.free_values)
-    isnothing(ph00) || (ph.free_values .= ph00.free_values)
+    set_free_values!(uh, uh00, "uh (steady init)")
+    set_free_values!(ph, ph00, "ph (steady init)")
 
-    # Picard iterations: the VMS operator is re-assembled around the last iterate
-    for i in 1:matrix_freq_update
-        @info "Steady primal, Picard iteration $i"
-        uh, ph = solve_steady_primal(uh, ph, X, Y, simcase, am.params, solver)
+    # Picard iterations: the VMS operator is re-assembled around the last iterate.
+    # `npicard` is a fixed iteration count, not a convergence tolerance, so the
+    # relative increment is logged every sweep to make silent under-convergence
+    # visible instead of assuming N iterations was enough. The loop stops early
+    # once the tolerance is met — with `picard_iters` set generously that is the
+    # normal exit, and the sweeps after convergence would be pure waste.
+    picard_tol = 1e-6
+    rel_du, rel_dp = Inf, Inf
+    for i in 1:npicard
+        uh_prev, ph_prev = uh, ph
+        @time uh, ph = solve_steady_primal(uh, ph, X, Y, simcase, am.params, solver)
+
+        rel_du = norm(get_free_dof_values(uh) .- get_free_dof_values(uh_prev)) / norm(get_free_dof_values(uh))
+        rel_dp = norm(get_free_dof_values(ph) .- get_free_dof_values(ph_prev)) / norm(get_free_dof_values(ph))
+        @info "Steady primal, Picard iteration $i/$npicard: rel Δu = $rel_du, rel Δp = $rel_dp"
+
+        max(rel_du, rel_dp) <= picard_tol && break
     end
+
+    if max(rel_du, rel_dp) > picard_tol
+        @warn "Steady primal did not reach the Picard convergence tolerance ($picard_tol) " *
+              "after $npicard iterations: rel Δu = $rel_du, rel Δp = $rel_dp. " *
+              "Raise `picard_iters` if this run feeds a gradient comparison; if the residual " *
+              "has stalled rather than decayed, the steady state is likely unstable at this " *
+              "operating point and Picard will not reach it however many sweeps it is given."
+    end
+    updatekey(am.params, :picard_residual, (rel_du=rel_du, rel_dp=rel_dp, tol=picard_tol))
 
     if !isnothing(filename)
         writevtk(Ω, filename; nsubcells=order, cellfields=["uh" => uh, "ph" => ph])
@@ -186,9 +269,10 @@ end
 # Unsteady solver
 #############################################################################
 
-function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename, uh00, ph00)
-    @sunpack D, order, t_endramp, t0, tF, θ, dt, u_in, time_window = simcase
+function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename, uh00, ph00, linear_backend::Symbol=:cpu)
+    @sunpack D, order, t0, tF, θ, dt, u_in, time_window = simcase
     @sunpack M = simcase # save a .vtu file every M steps
+    @sunpack matrix_freq_update = simcase # rebuild+refactorize the operator every N steps
     @unpack model = am
 
     V, Q = create_primal_spaces(model, simcase)
@@ -200,8 +284,8 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     U = TransientTrialFESpace(V, [u0, u0, u_walls])
     P = TransientTrialFESpace(Q, p0)
 
-    Y = TransientMultiFieldFESpace([V, Q])
-    X = TransientMultiFieldFESpace([U, P])
+    Y = velocity_pressure_space(V, Q, linear_backend)
+    X = velocity_pressure_space(U, P, linear_backend)
 
     setup_shape_opt_spaces!(D, order, model, am)
     Ω, _ = setup_domain_measures!(am, order)
@@ -209,24 +293,19 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     uh0 = interpolate(u0(0.0), U(0.0))
     ph0 = interpolate(p0(0.0), P(0.0))
 
-    if isnothing(uh00) && t_endramp == t0
-        # initialize from the steady solution
-        uh00, ph00 = solve_inc_primal_steady(am, simcase, nothing, uh00, uh00)
-    end
+    # Impulsive start from the freestream interpolant: the start-up transient is
+    # what seeds the wake instability. Initializing from the converged steady
+    # solution (a Picard solve) instead would place the flow exactly on the
+    # unstable equilibrium with no perturbation to grow, pinning it at steady
+    # state and suppressing vortex shedding. A caller may still warm-start from a
+    # supplied field by passing uh00/ph00.
+    set_free_values!(uh0, uh00, "uh (unsteady init)")
+    set_free_values!(ph0, ph00, "ph (unsteady init)")
 
-    uh0.free_values .= uh00.free_values
-    ph0.free_values .= ph00.free_values
-
-    xh0 = interpolate([uh0, ph0], X(0.0))
+    xh0 = interpolate([uh0, ph0], X(t0))
 
     updatekey(am.params, :uh, uh0)
     updatekey(am.params, :ph, ph0)
-
-    m, res, rhs = equations_primal(simcase, am.params, :unsteady)
-    op = TransientLinearFEOperator((res, m), rhs, X, Y)
-
-    ode_solver = ThetaMethod(LUSolver(), dt, θ)
-    sol = Gridap.solve(ode_solver, op, t0, tF, xh0)
 
     UH = [copy(uh0.free_values)]
     PH = [copy(ph0.free_values)]
@@ -234,23 +313,40 @@ function solve_inc_primal_unsteady(am::AirfoilModel, simcase::Airfoil, filename,
     res_path = "Results_unsteady_primal"
     mkpath(res_path)
 
+    ctx = solver_context(simcase, am.params, P, Q; transient=true)
+    lsolver = linear_solver(linear_backend, ctx)
+
+    # rebuilt once per chunk, around the linearization field currently in
+    # params[:uh]; `constant_forms` is what lets Gridap reuse the factorization
+    # for every step inside the chunk
+    make_operator = function ()
+        m, res, rhs = equations_primal(simcase, am.params, :unsteady)
+        return TransientLinearFEOperator((res, m), rhs, X, Y; constant_forms=(true, true))
+    end
+
+    # advance the frozen linearization to the latest velocity state
+    refresh! = function (_step, state)
+        xh_state = FEFunction(X(t0), state)
+        copyto!(am.params[:uh].free_values, get_free_dof_values(first(xh_state)))
+    end
+
     createpvd(filename) do pvd
-        pvd[0] = createvtk(Ω, joinpath(res_path, "$(filename)_0.vtu");
+        pvd[t0] = createvtk(Ω, joinpath(res_path, "$(filename)_0.vtu");
             nsubcells=order, cellfields=["uh" => uh0, "ph" => ph0])
-        for (idx, (t, xhtn)) in enumerate(sol)
+
+        on_step! = function (idx, t, xhtn)
             uh, ph = xhtn
             push!(UH, copy(uh.free_values))
             push!(PH, copy(ph.free_values))
-            println("Primal solved at time step $t")
-
-            # keep the linearization field of the VMS operator at the current state
-            copyto!(am.params[:uh].free_values, uh.free_values)
 
             if mod(idx, M) == 0
                 pvd[t] = createvtk(Ω, joinpath(res_path, "$(filename)_$t.vtu");
                     nsubcells=order, cellfields=["uh" => uh, "ph" => ph])
             end
         end
+
+        march_frozen_theta(make_operator, lsolver, X, xh0, t0, tF, dt, θ, matrix_freq_update;
+            on_step! = on_step!, refresh! = refresh!, label = "Primal")
     end
 
     updatekey(am.params, :UH, UH)

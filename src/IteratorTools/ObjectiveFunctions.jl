@@ -6,12 +6,13 @@
     compute_airfoil_forces(uh, ph, nΓ, dΓ, ν)
 
 Drag and lift over the airfoil boundary, accounting for pressure and viscous
-stresses. `nΓ` must point outward with respect to the body.
+stresses. `nΓ` must point outward with respect to the body. Dimension-generic:
+drag/lift are the x/y components of the total force (spanwise force is dropped).
 """
 function compute_airfoil_forces(uh::SingleFieldFEFunction, ph::SingleFieldFEFunction, nΓ::OperationCellField, dΓ::GenericMeasure, ν::Float64)
     IForce = ∫(-ph ⋅ nΓ + ν * (∇(uh) + transpose(∇(uh))) ⋅ nΓ)dΓ
-    D, L = sum(IForce)
-    return D, L
+    F = sum(IForce)
+    return F[1], F[2]
 end
 
 """
@@ -41,12 +42,9 @@ minimum-thickness penalty. Returns `(fitness + penalty, [CD, CL])`.
 """
 function obj_fun(am::AirfoilModel, vbcase::Airfoil, uh, ph, thick_penalty::ThickPenalty, fun::Function)
     @sunpack order = vbcase
-    @unpack model = am
     @unpack thickness_penalty, valid = thick_penalty
 
-    Γ = BoundaryTriangulation(model; tags="airfoil")
-    dΓ = Measure(Γ, 2 * order)
-    nΓ = -1 .* get_normal_vector(Γ)
+    dΓ, nΓ = airfoil_boundary!(am, order)
 
     physicalp = vbcase.simulationp.physicalp
     CD, CL = compute_airfoil_coefficients(uh, ph, nΓ, dΓ, physicalp)

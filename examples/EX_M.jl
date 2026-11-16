@@ -60,7 +60,7 @@ end
 #Perturbation of your design parameters. The one on the pressure side are pertubed by -δ; so the deformation is always outward
 adj_solver = AdjSolver(δ=0.0001)
 
-#here you can choose :steady or :unsteady for the resolution of the primal flow. The unsteady solution is always initialized from a steady one.
+#here you can choose :steady or :unsteady for the resolution of the primal flow. The unsteady solution starts impulsively from the freestream (unless warm-started with supplied fields).
 adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,(:unsteady,:steady), J )
 
 

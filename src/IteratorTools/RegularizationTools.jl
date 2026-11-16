@@ -55,3 +55,41 @@ function generate_model(adesign::AirfoilDesign, i::Int64, ss::Float64, meshinfo,
 
     return model
 end
+
+"""
+    perturbed_airfoil_model(adesign, i, ss, am0, simcase, solver, folder)
+
+`AirfoilModel` of the geometry obtained by perturbing design parameter `i` of
+`adesign` by the signed shift `ss`, plus the mesh-velocity field when one is
+available. Returns `(am1, mesh_velocity)`.
+
+Two strategies, chosen by `AdjSolver.mesh_motion`:
+
+- `true` (default): deform the baseline mesh of `am0`
+  ([`Interfaces.deform_airfoil_mesh`](@ref)). No Gmsh call, topology preserved
+  by construction, and `mesh_velocity` is the exact displacement field that was
+  applied — so the sensitivity kernel needs no parametrization-specific
+  reconstruction of `δβ`.
+- `false`: regenerate the mesh with Gmsh ([`generate_model`](@ref)) and return
+  `mesh_velocity = nothing`, so the sensitivity falls back to differencing nodal
+  positions between two independently generated meshes.
+
+The deformation path also lifts the structured-mesh restriction on CST designs:
+that restriction existed only because remeshing does not preserve unstructured
+topology, which deformation does trivially.
+"""
+function perturbed_airfoil_model(adesign::AirfoilDesign, i::Int64, ss::Float64,
+    am0::AirfoilModel, simcase::Airfoil, solver::AdjSolver, folder::String)
+
+    if solver.mesh_motion
+        adesign1 = perturb_DesignParameter(adesign, i, ss)
+        model1, dh = deform_airfoil_mesh(am0, adesign.ap, adesign1.ap, simcase;
+            χ=solver.mesh_stiffening)
+        return AirfoilModel(model1, simcase), dh
+    end
+
+    meshinfo = simcase.meshp.meshinfo
+    physicalp = simcase.simulationp.physicalp
+    model1 = generate_model(adesign, i, ss, meshinfo, physicalp, folder)
+    return AirfoilModel(model1, simcase), nothing
+end

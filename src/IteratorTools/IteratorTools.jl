@@ -27,6 +27,7 @@ include("ObjectiveFunctions.jl")
 
 export regularize_airfoil
 export generate_model
+export perturbed_airfoil_model
 include("RegularizationTools.jl")
 
 export compute_sensitivity

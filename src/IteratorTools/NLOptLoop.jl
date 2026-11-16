@@ -55,16 +55,21 @@ end
 
 
 function bounds_w(adesign::AirfoilCSTDesign,  Ndes::Int64, bounds::DesignBounds)
-    @unpack upper, lower, Δy = bounds
+    @unpack upper, lower, nose, cross = bounds
 
-    Nhalf = Int(Ndes ÷ 2)
-    nose = 0.08
-    lb = [nose; nose; nose; -0.15.* ones(Nhalf-3); -1.5 .* ones(Nhalf)]
-    ub = [1.5 .* ones(Nhalf); nose; -nose;-nose; 0.15 .* ones(Nhalf-3)]
-    
+    Nhalf = Ndes ÷ 2
+    @assert Nhalf > 3 "CST bounds need more than 3 weights per side, got $Nhalf"
+
+    # suction side (first Nhalf weights): the 3 leading-edge weights stay ≥ nose,
+    # the rest may cross zero down to -cross; pressure side mirrored.
+    lb = [fill(nose, 3); fill(-cross, Nhalf - 3); fill(lower, Nhalf)]
+    ub = [fill(upper, Nhalf); nose; fill(-nose, 2); fill(cross, Nhalf - 3)]
+
     @info "Bounds settings"
     println("lower:$lb")
     println("upper:$ub")
+
+    [@assert ub1 > lb1 "Inconsistent CST bounds: upper $ub1 <= lower $lb1" for (ub1, lb1) in zip(ub, lb)]
 
     return lb,ub
 end
@@ -102,12 +107,14 @@ function f_and_∇f(w::Vector{Float64}, grad::Vector{Float64}, cache::SharedCach
     am =  AirfoilModel(model, vbcase)
 
 
-    #Solve Primal
+    #Solve Primal, warm-started from the previous design's solution when the
+    #DOF layout allows it (see set_free_values!)
     filename = "sol_$(iter)"
-    uh,ph = solve_inc_primal(am, vbcase, filename, timesol[1]; uh0=nothing,ph0=nothing)
- 
+    uh,ph = solve_inc_primal(am, vbcase, filename, timesol[1];
+        uh0=uh, ph0=ph, linear_backend=solver.linear_backend)
+
     #### extract results from primal solution: Cp (and Cf)
-    PressureCoefficient = get_aerodynamic_features(am,uh,ph)
+    PressureCoefficient = get_aerodynamic_features(am, physicalp, uh, ph)
     
     fval, CDCL = obj_fun(am, vbcase, uh,ph, thick_penalty, J)
     #### Adjoint Boundary Conditions
@@ -117,7 +124,8 @@ function f_and_∇f(w::Vector{Float64}, grad::Vector{Float64}, cache::SharedCach
     
     #### Start Computing the Gradient ####
 
-    uhadj,phadj = solve_inc_adj(am, vbcase, adj_bc, "inc-adj-"*string( timesol[2]) *"-$iter", timesol[2], uh, ph)
+    uhadj,phadj = solve_inc_adj(am, vbcase, adj_bc, "inc-adj-"*string( timesol[2]) *"-$iter", timesol[2], uh, ph;
+        linear_backend=solver.linear_backend, adj_transient_steps=solver.adj_transient_steps)
 
     δ = solver.δ #0.0001
     shift = CSTweights(Int(Ndes/2), δ)
@@ -151,22 +159,22 @@ end
 
 function iterate_perturbation(shift::Vector{Float64}, adesign::AirfoilDesign, am::AirfoilModel, airfoil_case::Airfoil, solver::AdjSolver, uh,uhadj )
     Ndes = length(shift)
-    @unpack thick_penalty,regularization = solver
+    @unpack thick_penalty = solver
 
-    meshinfo = airfoil_case.meshp.meshinfo
-    physicalp =airfoil_case.simulationp.physicalp
     Ji = zeros(Ndes)
     Jthickness = zeros(Ndes)
     for (i,ss) in enumerate(shift)
         @info "Perturbation Domain $i"
 
-        model_tmp = generate_model(adesign, i, ss, meshinfo, physicalp, "MeshPerturb")
-        am_tmp =  AirfoilModel(model_tmp, airfoil_case)
+        # with solver.mesh_motion the baseline mesh is deformed instead of
+        # remeshed: one factorization is shared by all Ndes perturbations, and
+        # `dh` is the exact mesh velocity for the sensitivity kernel
+        am_tmp, dh = perturbed_airfoil_model(adesign, i, ss, am, airfoil_case, solver, "MeshPerturb")
 
-        Ji[i],Jthickness[i] = compute_sensitivity(am, am_tmp,adesign, i,ss, airfoil_case,thick_penalty, uh,uhadj) 
+        Ji[i],Jthickness[i] = compute_sensitivity(am, am_tmp,adesign, i,ss, airfoil_case,thick_penalty, uh,uhadj; mesh_velocity=dh)
 
     end
-    
+
     return Ji, Jthickness
 end
 

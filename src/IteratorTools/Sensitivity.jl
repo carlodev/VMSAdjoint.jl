@@ -14,17 +14,36 @@ mesh-deformation field is built; that part is dispatched through
 `deformation_normal_field`, while the actual gradient kernel lives in
 `compute_gradient`.
 """
-function compute_sensitivity(am0::AirfoilModel, am1::AirfoilModel, adesign::AirfoilDesign, IIDX::Int64, δ::Float64, simcase::Airfoil, thick_penalty::ThickPenalty, uh, uhadj)
+function compute_sensitivity(am0::AirfoilModel, am1::AirfoilModel, adesign::AirfoilDesign, IIDX::Int64, δ::Float64, simcase::Airfoil, thick_penalty::ThickPenalty, uh, uhadj; mesh_velocity=nothing)
     @sunpack ν = simcase
     @unpack nΓ, dΓ = am0.params
 
     physicalp = simcase.simulationp.physicalp
     C∞ = 0.5 * physicalp.c * physicalp.u_in_mag^2  # force-coefficient reference; must match ObjectiveFunctions.q
 
-    v_field_corr = deformation_normal_field(adesign, IIDX, am0, am1, δ, simcase)
+    # `mesh_velocity` is the volume displacement field produced by the
+    # mesh-deformation path; when present it IS the mesh velocity (up to the
+    # 1/δ scaling) and needs no parametrization-specific reconstruction.
+    v_field_corr = isnothing(mesh_velocity) ?
+                   deformation_normal_field(adesign, IIDX, am0, am1, δ, simcase) :
+                   deformation_normal_field(mesh_velocity, nΓ, δ)
 
     return compute_gradient(uh, uhadj, ν, nΓ, dΓ, am0, am1, δ, thick_penalty, v_field_corr, C∞)
 end
+
+"""
+    deformation_normal_field(dh, nΓ, δ)
+
+Normal mesh-deformation velocity `δβ = (∂x/∂β)·n` straight from the
+mesh-motion displacement field `dh` produced by
+[`Interfaces.deform_airfoil_mesh`](@ref) for a perturbation of size `δ`.
+
+This is the same quantity the two remeshing-based methods below reconstruct,
+but exact rather than inferred: `dh` is the actual displacement applied to the
+mesh, so no assumption about matching mesh topology (CST) or about the shape of
+the surface perturbation (RBF) is needed, and it is parametrization-independent.
+"""
+deformation_normal_field(dh, nΓ, δ::Float64) = (dh ⋅ nΓ) / δ
 
 
 """
@@ -51,24 +70,23 @@ function deformation_normal_field(rbfd::RBFDesign, IIDX::Int64, am0::AirfoilMode
     @sunpack AoA = simcase
     @unpack VV0, nΓ = am0.params
 
-    function rotation(a::Vector{Float64}, AoA::Float64)
-        x, y = a
-        xrt = x * cosd(AoA) + y * sind(AoA)
-        yrt = -1 * x * sind(AoA) + y * cosd(AoA)
-        return [xrt, yrt]
-    end
-
+    # RBF control points live on the 2D airfoil section (see the 2D guard in AirfoilModel)
     top_cp(n::VectorValue{2,Float64})    = n[2] > 0 ? VectorValue(0.0,  1.0) : VectorValue(0.0, 0.0)
     bottom_cp(n::VectorValue{2,Float64}) = n[2] < 0 ? VectorValue(0.0, -1.0) : VectorValue(0.0, 0.0)
 
     Ndes = length(get_DesignParameters(rbfd))
     Nhalf = Int(Ndes ÷ 2)
 
-    xr, yr = rotation([rbfd.rbfg.control_points[IIDX], rbfd.cy[IIDX]], AoA)
+    # Control point lives in the airfoil-fixed design frame (read straight off
+    # AirfoilPoints, no AoA). fx_rbf pulls each mesh-frame query point back into
+    # the design frame, so the control point must stay there too — rotating it
+    # here would offset the two by 2·AoA and misplace the RBF bump (isotropic
+    # kernel ⇒ frame choice is free, only consistency matters).
+    xr, yr = rbfd.rbfg.control_points[IIDX], rbfd.cy[IIDX]
     RB = rbfd.rbfg.RBFfun
 
     function fx_rbf(x)
-        x1, y1 = rotation([x...], -AoA)
+        x1, y1 = rotate_points([x...], -AoA)
         dist = norm([x1, y1] - [xr, yr])
         rb = AirfoilTools.AirfoilRBF.fRBF(dist, RB.support_radius, RB.fun)
         return VectorValue(0.0, float(rb))

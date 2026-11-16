@@ -22,7 +22,7 @@ params:: contains info on the nodes of the model, distinguishing from points on 
 """
 struct AirfoilModel
     ap::AirfoilPoints
-    model::Gridap.Geometry.UnstructuredDiscreteModel
+    model::Gridap.Geometry.DiscreteModel
     an::AirfoilNormals
     params::Dict{Symbol,Any}
 end
@@ -47,13 +47,21 @@ end
 """
     DesignBounds
 
-Contains info on the boundary conditions for the design variables;
-Check bounds_w to see how they are used
+Bounds on the design variables; consumed by `bounds_w` (one method per
+parametrization).
+
+- RBF designs use `upper`, `lower`, `Δy`.
+- CST designs use `upper`/`lower` as the main weight bounds plus:
+  `nose` — minimum magnitude of the three leading-edge weights (keeps a
+  round nose), and `cross` — how far the remaining weights of one side may
+  cross zero towards the other side.
 """
 @with_kw struct DesignBounds
     upper::Float64=0.5
     lower::Float64=-0.5
     Δy::Float64=0.005
+    nose::Float64=0.08
+    cross::Float64=0.15
 end
 
 """
@@ -109,6 +117,32 @@ end
 """
     AdjSolver
 
+Options of the adjoint optimization loop.
+
+`linear_backend` selects how the linear systems of the primal/adjoint solvers
+are solved:
+- `:cpu`   UMFPACK LU (default)
+- `:gpu`   NVIDIA cuDSS LU; requires `using CUDA, CUDSS` before solving
+- `:petsc` PETSc KSP driven by `SolverParameters.petsc_options`; the whole run
+           must be wrapped in `with_petsc(simcase) do ... end`
+- `:block` GridapSolvers FGMRES with a block velocity/pressure preconditioner
+
+`mesh_motion` selects how the perturbed geometries of the sensitivity loop are
+obtained:
+- `true`  (default) deform the baseline mesh — no Gmsh call per design
+          parameter, guaranteed topology match, exact mesh velocity
+- `false` regenerate the mesh with Gmsh for every perturbation (previous
+          behaviour; the fallback when a design step is too large to deform)
+
+`mesh_stiffening` is the exponent χ of the cell-wise mesh stiffness
+`(V_max/V_cell)^χ` used by the deformation; raise it if boundary-layer cells
+distort, lower it towards 0 for a plain harmonic extension.
+
+`adj_transient_steps` is how many time steps of adjoint start-up transient the
+unsteady adjoint discards from its averaging (see
+[`IncompressibleSolvers.solve_inc_adj_unsteady`](@ref)). It is a convergence
+parameter, not a physical constant: sweep it, together with the primal
+averaging window, before trusting an unsteady gradient.
 """
 @with_kw struct AdjSolver
     δ::Float64=0.0001 #Perturbation of the design parameters for finite differences
@@ -116,6 +150,13 @@ end
     thick_penalty::ThickPenalty=ThickPenalty()
     regularization::Regularization=Regularization()
     opt_alg::Symbol = :LD_LBFGS
+    linear_backend::Symbol = :cpu
+    mesh_motion::Bool = true
+    mesh_stiffening::Float64 = 1.0
+    adj_transient_steps::Int = 10
+    @assert linear_backend in (:cpu, :gpu, :petsc, :block) "linear_backend must be one of (:cpu, :gpu, :petsc, :block)"
+    @assert mesh_stiffening >= 0.0 "mesh_stiffening (χ) must be non-negative"
+    @assert adj_transient_steps >= 0 "adj_transient_steps must be non-negative"
 end
 
 @with_kw struct MeshSize
@@ -125,6 +166,8 @@ end
     meshref::Real=1.0 #increase it, and it wil increase the resolution. Put = 0 and it will be very coarse, useful to debug
     H::Real = 8
     Lback::Real = 8
+    curv_turn_deg::Float64 = 5.0 #max turning angle (deg) of one airfoil surface element; 0 ⇒ uniform sizing
+    @assert curv_turn_deg >= 0.0 "curv_turn_deg must be non-negative (0 disables curvature-based sizing)"
 end
 
 """

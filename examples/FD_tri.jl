@@ -21,8 +21,6 @@ fname = "n0012.csv"
 AoA   = 2.5
 ap0   = get_airfoil_coordinates(joinpath(@__DIR__, fname))
 
-ap0.yu[5] = ap0.yu[5] * 1
-
 control_px     = collect(LinRange(0.05, 0.95, 20))     # 20 + 20 = 40 control points
 control_points = ControlPoints(control_px, control_px)
 
@@ -78,11 +76,8 @@ am    = AirfoilModel(model, airfoil_case)
 
 
 
-
-adj_solver = AdjSolver(δ=δ)
-
+adj_solver = AdjSolver(δ=δ,linear_backend=:cpu)
 adjoint_airfoil_problem = AdjointProblem( rbfd,airfoil_case,adj_solver,(:unsteady, :steady), J)
-
 
 
 

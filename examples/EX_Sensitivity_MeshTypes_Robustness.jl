@@ -21,7 +21,6 @@ fname = "n0012.csv"
 AoA   = 2.5
 ap0   = get_airfoil_coordinates(joinpath(@__DIR__, fname))
 
-ap0.yu[5] = ap0.yu[5] * 1
 
 control_px     = collect(LinRange(0.05, 0.95, 20))     # 20 + 20 = 40 control points
 control_points = ControlPoints(control_px, control_px)
@@ -57,7 +56,7 @@ thick_penalty = ThickPenalty()   # inactive by default (valid=false) -> no penal
 δ             = 1e-4             # design-parameter perturbation
 
 
-meshinfo = AirfoilMesh{Unstructured}(elements=:TRI, AoA = AoA, MS = MeshSize(BL_fl = 1e-4, BL_tt = 0.01, meshref = 1.0))
+meshinfo = AirfoilMesh{Unstructured}(elements=:TRI, AoA = AoA, MS = MeshSize(BL_fl = 1e-4, BL_tt = 0.01, meshref = 1.0, H=3.0, Lback=3.0))
 tag = "tri_unstructured_BL"
 
 # ---------------------------------------------------------------------------
@@ -98,11 +97,3 @@ uh, ph = solve_inc_primal(am, airfoil_case, "primal_$tag", timesol[1])
         grad[i]   = Jsens
     end
 
-using Plots
-
-shift = CSTweights(Int(Ndes/2), δ)
-δv=   vcat(shift)
-fd = ([ 0.1216404544975305, 0.12164022538139854, 0.121639265678663, 0.12163864470430423, 0.12163829871723085, 0.12163808109652317, 0.12163789670091155, 0.12163769948157467, 0.12163746739003616, 0.1216371925430035, 0.12163687744654388, 0.12163653066004938, 0.12163616545553438, 0.12163579709642698, 0.12163544348892595, 0.12163511230041991, 0.1216348114898485, 0.1216345602199478, 0.12163435681023815, 0.12163427508648679, 0.12163706730354933, 0.12163706106603764, 0.12163663022813836, 0.1216362323852443, 0.12163596143757201, 0.12163582081275652, 0.12163578439796892, 0.12163582287820633, 0.12163591042708378, 0.12163602986232984, 0.12163617245015604, 0.12163633750628997, 0.12163652509682873, 0.12163673532585907, 0.12163697580637903, 0.12163722805357227, 0.12163748254041373, 0.12163779866991345, 0.12163817398616644, 0.12163895833965868] .- 0.12163386560377128) ./ δv
-
-plot(grad)
-scatter!(fd)

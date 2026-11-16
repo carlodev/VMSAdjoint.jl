@@ -9,12 +9,13 @@ function equations_primal( simcase::Airfoil,params::Dict{Symbol,Any},time_dep::S
 end
 
 function equations_primal( simcase::Airfoil,params::Dict{Symbol,Any},::Val{:steady})
-    @unpack uh = params
+    @unpack uh, dΩ = params
+    @sunpack D = simcase
 
-    _,_,Auu,Aup,Apu,App,_,_,rhs_v = segregated_equations(uh,params,simcase)
+    _,_,Auu,Aup,Apu,App,_,_,_ = segregated_equations(uh,params,simcase)
     res_prim((u, p), (v, q)) = Auu(u,v) + Aup(p,v) + Apu(u,q) + App(p,q)
 
-    rhs((v,q)) = rhs_v(v)
+    rhs((v,q)) = ∫(VectorValue(zeros(D)...) ⋅ v)dΩ
 
     return res_prim, rhs
 end
